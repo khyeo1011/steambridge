@@ -16,6 +16,14 @@ type Router struct {
 	table *Table
 }
 
+func NewRouter(tap *tap.Device, steam SteamSender, table *Table) *Router {
+	return &Router{
+		tap:   tap,
+		steam: steam,
+		table: table,
+	}
+}
+
 func (r *Router) HandleIngress(senderID uint64, frame []byte) {
 	if len(frame) < 14 {
 		return
@@ -56,4 +64,8 @@ func (r *Router) StartEgress() {
 			}
 		}
 	}
+}
+
+func (r *Router) SetSteamSender(s SteamSender) {
+	r.steam = s
 }

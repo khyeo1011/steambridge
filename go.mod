@@ -1,6 +1,6 @@
 module steambridge
 
-go 1.26.1
+go 1.23.6
 
 require (
 	github.com/BenLubar/steamworks v0.0.0-20181009034830-72424b225176
@@ -10,7 +10,9 @@ require (
 
 require (
 	github.com/vishvananda/netns v0.0.5 // indirect
-	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
 )
 
 replace golang.org/x/tools => golang.org/x/tools v0.14.0
+
+replace github.com/BenLubar/steamworks => ./steamworks_patched

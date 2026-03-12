@@ -58,13 +58,10 @@ func (c *Client) ReadLoop() {
 	for {
 		packet, steamID := steamnet.ReadPacket(0)
 
-		// If no packet is available, sleep for a millisecond and try again
 		if len(packet) == 0 {
 			time.Sleep(time.Millisecond)
 			continue
 		}
-
-		// If we got a packet, process it immediately!
 		c.router.HandleIngress(uint64(steamID), packet)
 	}
 }

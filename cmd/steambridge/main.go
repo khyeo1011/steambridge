@@ -1,54 +1,48 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"steambridge/internal/steam"
+	"steambridge/internal/switchboard"
+	"steambridge/internal/tap"
 )
 
 func main() {
-	// 1. Parse CLI Flags
-	targetSteamID := flag.Uint64("steamid", 0, "Target SteamID to connect to (0 for lobby/host mode)")
-	lobbyID := flag.Uint64("lobby", 0, "Target LobbyID to join")
-	ifaceID := flag.String("iface", "steambridge0", "Name of the TAP interface to create")
+	ifaceName := flag.String("iface", "steambridge0", "Name of the TAP interface to create/bind")
 	flag.Parse()
 
-	log.Printf("Starting steambridge on interface: %s\n", *ifaceID)
-	if *targetSteamID != 0 {
-		log.Printf("Targeting SteamID: %d\n", *targetSteamID)
-	} else if *lobbyID != 0 {
-		log.Printf("Targeting LobbyID: %d\n", *lobbyID)
-	} else {
-		log.Println("No target specified, running in host/listen mode.")
+	log.Println("Starting SteamBridge...")
+
+	table := switchboard.NewTable()
+
+	log.Printf("Setting up TAP interface: %s\n", *ifaceName)
+	tapDev, err := tap.NewDevice(*ifaceName)
+	if err != nil {
+		log.Fatalf("Fatal: Could not create TAP device: %v", err)
 	}
+	defer tapDev.Close()
 
-	// 2. Setup Context for Graceful Shutdown
-	// This context will be passed down to your TAP and Steam workers.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	router := switchboard.NewRouter(tapDev, nil, table)
 
-	// Listen for OS signals (Ctrl+C, SIGTERM)
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+	log.Println("Initializing Steamworks API...")
+	client := steam.NewClient(router)
 
-	go func() {
-		<-sigChan
-		log.Println("\nShutdown signal received. Initiating graceful cleanup...")
-		cancel() // This triggers ctx.Done() across all your goroutines
-	}()
+	router.SetSteamSender(client)
 
-	// 3. Application Initialization (Placeholders for upcoming phases)
-	// TODO: Initialize Steamworks (AppID 480)
-	// TODO: Initialize TAP interface with MTU 1280
-	// TODO: Initialize Switchboard/MAC Table
-	// TODO: Start Egress/Ingress routing Goroutines
+	log.Println("Starting Egress and Ingress routing loops...")
+	go router.StartEgress()
+	go client.ReadLoop()
 
-	// 4. Block until context is cancelled
-	<-ctx.Done()
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 
-	// TODO: Execute final cleanup calls (Close TAP, SteamAPI_Shutdown)
-	log.Println("Graceful shutdown complete.")
+	log.Printf("SteamBridge is live on interface '%s'! Press Ctrl+C to exit.\n", *ifaceName)
+	<-sigCh
+
+	log.Println("\nReceived shutdown signal. Closing bridge...")
 }
