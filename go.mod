@@ -2,10 +2,13 @@ module steambridge
 
 go 1.26.1
 
-require github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
+require (
+	github.com/BenLubar/steamworks v0.0.0-20181009034830-72424b225176
+	github.com/songgao/water v0.0.0-20200317203138-2b4b6d7c09d8
+	github.com/vishvananda/netlink v1.3.1
+)
 
 require (
-	github.com/vishvananda/netlink v1.3.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	golang.org/x/sys v0.42.0 // indirect
 )
