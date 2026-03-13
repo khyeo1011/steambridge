@@ -16,9 +16,22 @@ type Router struct {
 	table *Table
 }
 
+func NewRouter(tap *tap.Device, steam SteamSender, table *Table) *Router {
+	return &Router{
+		tap:   tap,
+		steam: steam,
+		table: table,
+	}
+}
+
 func (r *Router) HandleIngress(senderID uint64, frame []byte) {
 	if len(frame) < 14 {
 		return
+	}
+	if len(frame) < 60 {
+		padded := make([]byte, 60)
+		copy(padded, frame)
+		frame = padded
 	}
 	var sourceMAC [6]byte
 	copy(sourceMAC[:], frame[6:12])
@@ -35,6 +48,10 @@ func (r *Router) StartEgress() {
 			return
 		}
 		if n < 14 {
+			continue
+		}
+
+		if !dpi.IsValidLan(frame[:n]) {
 			continue
 		}
 
@@ -56,4 +73,8 @@ func (r *Router) StartEgress() {
 			}
 		}
 	}
+}
+
+func (r *Router) SetSteamSender(s SteamSender) {
+	r.steam = s
 }
