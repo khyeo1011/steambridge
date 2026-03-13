@@ -7,14 +7,13 @@ REM Check if the previous command succeeded
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo [ERROR] CMake configuration failed.
-    pause
     exit /b %ERRORLEVEL%
 )
 
-REM Build the "all" target
+REM Build the default target (auto-resolves ALL_BUILD vs all)
 echo.
-echo Building target 'all'...
-cmake --build ../build/ --target all
+echo Building target...
+cmake --build ../build/ --config Release
 
 REM Final status check
 if %ERRORLEVEL% EQU 0 (
@@ -25,5 +24,4 @@ if %ERRORLEVEL% EQU 0 (
     echo [ERROR] Build failed.
 )
 
-pause
 exit /b %ERRORLEVEL%

@@ -1,11 +1,15 @@
 package tap
 
 import (
+	"os"
 	"testing"
 	"time"
 )
 
 func TestNewDevice(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TAP hardware creation test in CI environment")
+	}
 	ifaceID := "sb_test0" // Use a temporary name for testing
 
 	t.Logf("Attempting to create TAP device: %s", ifaceID)
