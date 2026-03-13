@@ -1,6 +1,7 @@
 package steam
 
 import (
+	"log"
 	"steambridge/internal/switchboard"
 	"sync"
 	"time"
@@ -75,7 +76,7 @@ func (c *Client) ReadLoop() {
 			time.Sleep(time.Millisecond) // Don't peg the CPU at 100%
 			continue
 		}
-
+		log.Printf("Steam Received %d bytes from %v", bytesRead, remoteSteamID)
 		packetCopy := make([]byte, bytesRead)
 		copy(packetCopy, buffer[:bytesRead])
 
