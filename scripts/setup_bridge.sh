@@ -30,6 +30,7 @@ done
 
 echo "Configuring $INTERFACE with IP $IP_ADDR..."
 sudo ip addr add "$IP_ADDR" dev "$INTERFACE"
+sleep 0.5
 sudo ip link set dev "$INTERFACE" up
 
 echo "Bridge is live. Logs follow:"
