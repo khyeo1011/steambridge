@@ -1,8 +1,27 @@
 #include "steam_bridge.h"
 #include <steam/steam_api.h>
 
+
+
+class BridgeCallbacks {
+public:
+    BridgeCallbacks() : m_CallbackP2PSessionRequest(this, &BridgeCallbacks::OnP2PSessionRequest) {}
+
+    STEAM_CALLBACK(BridgeCallbacks, OnP2PSessionRequest, P2PSessionRequest_t, m_CallbackP2PSessionRequest);
+};
+
+void BridgeCallbacks::OnP2PSessionRequest(P2PSessionRequest_t *pCallback) {
+    SteamNetworking()->AcceptP2PSessionWithUser(pCallback->m_steamIDRemote);
+}
+
+BridgeCallbacks* g_Callbacks = nullptr;
+
 BRIDGE_EXPORT bool Bridge_Init() {
-    return SteamAPI_Init();
+    if (!SteamAPI_Init()) {
+        return false;
+    }
+    g_Callbacks = new BridgeCallbacks(); // Spin up the listener
+    return true;
 }
 
 BRIDGE_EXPORT void Bridge_Shutdown() {
