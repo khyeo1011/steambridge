@@ -28,6 +28,12 @@ func NewClient(router *switchboard.Router) *Client {
 	}
 }
 
+func (c *Client) AddPeer(steamID uint64) {
+	c.peermutex.Lock()
+	defer c.peermutex.Unlock()
+	c.steamIDs[steamID] = true
+}
+
 func (c *Client) SendToPeer(steamID uint64, frame []byte, reliable bool) {
 	if len(frame) == 0 {
 		return

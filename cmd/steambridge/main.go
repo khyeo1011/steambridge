@@ -14,8 +14,8 @@ import (
 
 func main() {
 	ifaceName := flag.String("iface", "steambridge0", "Name of the TAP interface to create/bind")
+	peerID := flag.Uint64("peer", 0, "SteamID of the remote peer to bootstrap")
 	flag.Parse()
-
 	log.Println("Starting SteamBridge...")
 
 	table := switchboard.NewTable()
@@ -31,6 +31,10 @@ func main() {
 
 	log.Println("Initializing Steamworks API...")
 	client := steam.NewClient(router)
+
+	if *peerID != 0 {
+		client.AddPeer(*peerID)
+	}
 
 	router.SetSteamSender(client)
 
