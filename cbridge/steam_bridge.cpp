@@ -54,7 +54,7 @@ BRIDGE_EXPORT int Bridge_Receive(uint8_t* buffer, int bufferSize, uint64_t * out
         *outSteamIDRemote = remoteSteamID.ConvertToUint64();
         return bytesRead;
     } else {
-        return -1;
+        return 0;
     }
 }
 
