@@ -12,7 +12,7 @@ var (
 	bridgeRunCallbacks func()
 	bridgeShutdown     func()
 
-	bridgeReceive func(buffer *byte, bufferSize int, outSteamIDRemote *uint64) int
+	bridgeReceive func(buffer *byte, bufferSize int, outSteamIDRemote *uint64) int32
 	bridgeSend    func(steamId uint64, data *byte, size int, sendType int) bool
 )
 
