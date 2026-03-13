@@ -1,0 +1,64 @@
+name: SteamBridge CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Decrypt and Unpack Steamworks SDK
+      # We force bash so this runs the exact same way on Windows and Linux runners
+      shell: bash 
+      env:
+        SDK_PASS: ${{ secrets.SDK_PASSPHRASE }}
+      run: |
+        echo "Decrypting SDK vault..."
+        gpg --quiet --batch --yes --decrypt --passphrase="$SDK_PASS" --output sdk.zip steamworks_sdk.zip.gpg
+        
+        echo "Extracting SDK..."
+        # tar -xf works natively on modern Windows and Ubuntu runners for .zip files
+        tar -xf sdk.zip 
+        
+        echo "SDK ready."
+      
+    - name: Setup Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23.6'
+
+    - name: Setup CMake
+      uses: jwlawson/actions-setup-cmake@v2
+
+    - name: Build C++ Bridge (CMake)
+      run: |
+        cd cbridge
+        bash build.sh
+
+    - name: Run Go Tests
+      run: |
+        go test -v ./...
+
+    - name: Build Go Router
+      run: |
+        go build ./cmd/steambridge
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: steambridge-build-${{ matrix.os }}
+        path: |
+          steambridge*
+          *.dll
+          *.so
+          steam_appid.txt
