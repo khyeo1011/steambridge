@@ -72,9 +72,12 @@ func (c *Client) ReadLoop() {
 		var remoteSteamID uint64
 		bytesRead := bridgeReceive(&buffer[0], len(buffer), &remoteSteamID)
 
-		if bytesRead <= 0 {
+		if bytesRead == 0 {
 			time.Sleep(time.Millisecond) // Don't peg the CPU at 100%
 			continue
+		} else if bytesRead < 0 {
+			log.Printf("Bytes received = %d, aborting\n", bytesRead)
+			return
 		}
 		log.Printf("Steam Received %d bytes from %v", bytesRead, remoteSteamID)
 		packetCopy := make([]byte, bytesRead)
