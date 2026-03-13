@@ -50,6 +50,9 @@ func (r *Router) StartEgress() {
 		if n < 14 {
 			continue
 		}
+		if !dpi.IsValidLan(frame[:n]) {
+			continue
+		}
 
 		// Isolate the actual read bytes
 		payload := frame[:n]

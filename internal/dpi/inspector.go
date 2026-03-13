@@ -21,3 +21,19 @@ func IsReliable(frame []byte) bool {
 	}
 	return true
 }
+
+func IsValidLan(frame []byte) bool {
+	if len(frame) < 34 {
+		return false
+	}
+	var ethernetType uint16 = uint16(frame[12])<<8 | uint16(frame[13])
+	if ethernetType != 0x0800 {
+		return false
+	}
+
+	dstIP := frame[30:33]
+	if dstIP[0] == 10 || (dstIP[0] == 172 && dstIP[1] >= 16 && dstIP[1] <= 31) || (dstIP[0] == 192 && dstIP[1] == 168) {
+		return true
+	}
+	return false
+}
