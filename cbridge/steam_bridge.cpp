@@ -1,0 +1,44 @@
+#include "steam_bridge.h"
+#include <steam/steam_api.h>
+
+BRIDGE_EXPORT bool Bridge_Init() {
+    return SteamAPI_Init();
+}
+
+BRIDGE_EXPORT void Bridge_Shutdown() {
+    SteamAPI_Shutdown();
+}
+
+BRIDGE_EXPORT bool Bridge_Send(uint64_t steamId, const uint8_t* data, int size, int sendType) {
+    CSteamID remoteSteamID((uint64)steamId);
+    EP2PSend sendTypeEnum;
+    if (sendType == 0) {
+        sendTypeEnum = k_EP2PSendUnreliableNoDelay;
+    } else {
+        sendTypeEnum = k_EP2PSendReliable;
+    }
+    return SteamNetworking()->SendP2PPacket(remoteSteamID, data, size, sendTypeEnum);
+}
+
+BRIDGE_EXPORT int Bridge_Receive(uint8_t* buffer, int bufferSize, uint64_t * outSteamIDRemote) {
+    uint32_t msgSize;
+    if (!SteamNetworking()->IsP2PPacketAvailable(&msgSize, 0)) {
+        return 0; 
+    }
+    if (msgSize > bufferSize) {
+        // Message is too large for the buffer
+        return -1;
+    }
+    CSteamID remoteSteamID;
+    uint32_t bytesRead;
+    if (SteamNetworking()->ReadP2PPacket(buffer, bufferSize, &bytesRead, &remoteSteamID, 0)) {
+        *outSteamIDRemote = remoteSteamID.ConvertToUint64();
+        return bytesRead;
+    } else {
+        return -1;
+    }
+}
+
+BRIDGE_EXPORT void Bridge_RunCallbacks() {
+    SteamAPI_RunCallbacks();
+}

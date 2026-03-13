@@ -4,9 +4,6 @@ import (
 	"steambridge/internal/switchboard"
 	"sync"
 	"time"
-
-	"github.com/BenLubar/steamworks"
-	"github.com/BenLubar/steamworks/steamnet"
 )
 
 type Client struct {
@@ -16,10 +13,15 @@ type Client struct {
 }
 
 func NewClient(router *switchboard.Router) *Client {
-	err := steamworks.InitClient(true)
+	err := LoadLibrary()
 	if err != nil {
 		panic(err)
 	}
+
+	if !bridgeInit() {
+		panic("Bridge_Init failed")
+	}
+
 	return &Client{
 		router:   router,
 		steamIDs: make(map[uint64]bool),
@@ -27,41 +29,58 @@ func NewClient(router *switchboard.Router) *Client {
 }
 
 func (c *Client) SendToPeer(steamID uint64, frame []byte, reliable bool) {
-	c.peermutex.Lock()
-	defer c.peermutex.Unlock()
-	sendType := steamnet.Unreliable
-	if reliable {
-		sendType = steamnet.Reliable
+	if len(frame) == 0 {
+		return
 	}
 
-	target := steamworks.SteamID(steamID)
+	sendType := 0
+	if reliable {
+		sendType = 1
+	}
 
-	steamnet.SendPacket(target, frame, sendType, 0)
+	bridgeSend(steamID, &frame[0], len(frame), sendType)
 }
 
 func (c *Client) SendToAll(frame []byte, reliable bool) {
-	sendType := steamnet.Unreliable
+	sendType := 0
 	if reliable {
-		sendType = steamnet.Reliable
+		sendType = 1
 	}
 
 	c.peermutex.RLock()
 	defer c.peermutex.RUnlock()
 
 	for steamID := range c.steamIDs {
-		target := steamworks.SteamID(steamID)
-		steamnet.SendPacket(target, frame, sendType, 0)
+		bridgeSend(steamID, &frame[0], len(frame), sendType)
 	}
 }
 
 func (c *Client) ReadLoop() {
-	for {
-		packet, steamID := steamnet.ReadPacket(0)
+	// Allocate a buffer slightly larger than standard Ethernet MTU (1500)
+	buffer := make([]byte, 2048)
 
-		if len(packet) == 0 {
-			time.Sleep(time.Millisecond)
+	for {
+		bridgeRunCallbacks()
+
+		var remoteSteamID uint64
+		bytesRead := bridgeReceive(&buffer[0], len(buffer), &remoteSteamID)
+
+		if bytesRead <= 0 {
+			time.Sleep(time.Millisecond) // Don't peg the CPU at 100%
 			continue
 		}
-		c.router.HandleIngress(uint64(steamID), packet)
+
+		packetCopy := make([]byte, bytesRead)
+		copy(packetCopy, buffer[:bytesRead])
+
+		c.router.HandleIngress(remoteSteamID, packetCopy)
+
+		c.peermutex.Lock()
+		c.steamIDs[remoteSteamID] = true
+		c.peermutex.Unlock()
 	}
+}
+
+func (c *Client) Close() {
+	bridgeShutdown()
 }

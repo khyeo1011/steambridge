@@ -45,4 +45,8 @@ func main() {
 	<-sigCh
 
 	log.Println("\nReceived shutdown signal. Closing bridge...")
+
+	client.Close()
+
+	log.Println("Shutdown complete.")
 }
