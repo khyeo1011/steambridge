@@ -50,7 +50,7 @@ func (r *Router) StartEgress() {
 		if n < 14 {
 			continue
 		}
-		if !dpi.IsValidLan(frame[:n]) {
+		if !dpi.IsValidLan(frame) {
 			continue
 		}
 
