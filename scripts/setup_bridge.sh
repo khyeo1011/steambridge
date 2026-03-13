@@ -3,14 +3,16 @@
 PEER_ID=$1
 INTERFACE="steambridge0"
 IP_ADDR="10.1.0.11/24"
+PROJECT_ROOT="$(dirname "$0")/.."
 
 if [ -z "$PEER_ID" ]; then
-    echo "Usage: sudo ./setup_bridge.sh <REMOTE_STEAM_ID>"
+    echo "Usage: sudo ./scripts/setup_bridge.sh <REMOTE_STEAM_ID>"
     exit 1
 fi
 
 echo "Starting SteamBridge for peer $PEER_ID..."
-sudo go run ../cmd/steambridge/main.go --iface "$INTERFACE" --peer "$PEER_ID" &
+cd "$PROJECT_ROOT" || exit
+sudo go run cmd/steambridge/main.go --iface "$INTERFACE" --peer "$PEER_ID" &
 BRIDGE_PID=$!
 
 echo "Waiting for $INTERFACE to initialize..."
