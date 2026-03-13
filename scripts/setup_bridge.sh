@@ -1,5 +1,7 @@
 #!/bin/bash
 
+trap "sudo ip link delete $INTERFACE 2>/dev/null; exit" SIGINT SIGTERM EXIT
+
 PEER_ID=$1
 INTERFACE="steambridge0"
 IP_ADDR="10.1.0.11/24"
