@@ -28,6 +28,11 @@ func (r *Router) HandleIngress(senderID uint64, frame []byte) {
 	if len(frame) < 14 {
 		return
 	}
+	if len(frame) < 60 {
+		padded := make([]byte, 60)
+		copy(padded, frame)
+		frame = padded
+	}
 	var sourceMAC [6]byte
 	copy(sourceMAC[:], frame[6:12])
 	r.table.Update(sourceMAC, senderID)
