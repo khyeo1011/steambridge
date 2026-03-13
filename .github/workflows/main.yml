@@ -27,8 +27,7 @@ jobs:
         gpg --quiet --batch --yes --decrypt --passphrase="$SDK_PASS" --output sdk.zip steamworks_sdk.zip.gpg
         
         echo "Extracting SDK..."
-        # tar -xf works natively on modern Windows and Ubuntu runners for .zip files
-        tar -xf sdk.zip 
+        unzip -q sdk.zip 
         
         echo "SDK ready."
       
