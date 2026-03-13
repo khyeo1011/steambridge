@@ -39,10 +39,19 @@ jobs:
     - name: Setup CMake
       uses: jwlawson/actions-setup-cmake@v2
 
-    - name: Build C++ Bridge (CMake)
+    - name: Build C++ Bridge (Linux)
+      if: runner.os == 'Linux'
       run: |
         cd cbridge
         bash build.sh
+
+    - name: Build C++ Bridge (Windows)
+      if: runner.os == 'Windows'
+      # Force the step to use the native Windows Command Prompt
+      shell: cmd 
+      run: |
+        cd cbridge
+        call build.bat
 
     - name: Run Go Tests
       run: |
