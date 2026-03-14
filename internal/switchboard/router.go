@@ -1,6 +1,7 @@
 package switchboard
 
 import (
+	"context"
 	"steambridge/internal/dpi"
 	"steambridge/internal/tap"
 )
@@ -39,40 +40,46 @@ func (r *Router) HandleIngress(senderID uint64, frame []byte) {
 	r.tap.Write(frame)
 }
 
-func (r *Router) StartEgress() {
+func (r *Router) StartEgress(ctx context.Context) {
 	frame := make([]byte, 2048)
 
 	for {
-		n, err := r.tap.Read(frame)
-		if err != nil {
+		select {
+		case <-ctx.Done():
 			return
-		}
-		if n < 14 {
-			continue
-		}
+		default:
+			n, err := r.tap.Read(frame)
+			if err != nil {
+				return
+			}
+			if n < 14 {
+				continue
+			}
 
-		if !dpi.IsValidLan(frame[:n]) {
-			continue
-		}
+			if !dpi.IsValidLan(frame[:n]) {
+				continue
+			}
 
-		// Isolate the actual read bytes
-		payload := frame[:n]
-		reliable := dpi.IsReliable(payload)
+			// Isolate the actual read bytes
+			payload := frame[:n]
+			reliable := dpi.IsReliable(payload)
 
-		var destMAC [6]byte
-		copy(destMAC[:], payload[0:6])
+			var destMAC [6]byte
+			copy(destMAC[:], payload[0:6])
 
-		if destMAC == [6]byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF} {
-			r.steam.SendToAll(payload, reliable)
-		} else {
-			steamID, ok := r.table.Lookup(destMAC)
-			if ok {
-				r.steam.SendToPeer(steamID, payload, reliable)
-			} else {
+			if destMAC == [6]byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF} {
 				r.steam.SendToAll(payload, reliable)
+			} else {
+				steamID, ok := r.table.Lookup(destMAC)
+				if ok {
+					r.steam.SendToPeer(steamID, payload, reliable)
+				} else {
+					r.steam.SendToAll(payload, reliable)
+				}
 			}
 		}
 	}
+
 }
 
 func (r *Router) SetSteamSender(s SteamSender) {

@@ -13,9 +13,9 @@ type Device struct {
 	*water.Interface
 }
 
-func NewDevice(ifaceID string) (*Device, error) {
+func NewDevice(ifaceName string, ifaceID string) (*Device, error) {
 	// 1. Get the OS-specific config
-	config := getWaterConfig(ifaceID)
+	config := getWaterConfig(ifaceName, ifaceID)
 
 	// 2. Create the interface (Shared logic)
 	iface, err := water.New(config)

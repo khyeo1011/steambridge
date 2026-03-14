@@ -9,7 +9,12 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-func getWaterConfig(ifaceName string) water.Config {
+func getWaterConfig(ifaceName string, ifaceID string) water.Config {
+	if ifaceName == "" {
+		return water.Config{
+			DeviceType: water.TAP,
+		}
+	}
 	return water.Config{
 		DeviceType: water.TAP,
 		PlatformSpecificParams: water.PlatformSpecificParams{
