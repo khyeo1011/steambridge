@@ -49,7 +49,16 @@ func NewFacade(config Config) (*Facade, error) {
 
 	log.Printf("SteamBridge is live on interface '%s'! Press Ctrl+C to exit.\n", config.IfaceName)
 
-	return nil, nil
+	return &Facade{
+		ifaceName:  config.IfaceName,
+		ifaceID:    config.IfaceID,
+		tapDev:     tapDev,
+		router:     router,
+		client:     client,
+		table:      table,
+		wg:         sync.WaitGroup{},
+		cancelFunc: nil,
+	}, nil
 }
 
 func (f *Facade) Start(ctx context.Context) error {
