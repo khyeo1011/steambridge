@@ -18,11 +18,12 @@ var (
 
 func LoadLibrary() error {
 	var target string
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		target = "libsteam_bridge.dll"
-	} else if runtime.GOOS == "linux" {
+	case "linux":
 		target = "./libsteam_bridge.so"
-	} else {
+	default:
 		return errors.New("unsupported OS")
 	}
 

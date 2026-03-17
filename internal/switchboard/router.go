@@ -80,3 +80,7 @@ func (r *Router) StartEgress(ctx context.Context) {
 func (r *Router) SetSteamSender(s SteamSender) {
 	r.steam = s
 }
+
+func (r *Router) GetTap() *tap.Device {
+	return r.tap
+}

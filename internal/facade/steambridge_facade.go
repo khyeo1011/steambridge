@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"steambridge/internal/protocol"
 	"steambridge/internal/steam"
 	"steambridge/internal/switchboard"
 	"steambridge/internal/tap"
@@ -17,14 +18,15 @@ type Config struct {
 }
 
 type Facade struct {
-	ifaceName  string
-	ifaceID    string
-	tapDev     *tap.Device
-	router     *switchboard.Router
-	client     *steam.Client
-	table      *switchboard.Table
-	wg         sync.WaitGroup
-	cancelFunc context.CancelFunc
+	ifaceName       string
+	ifaceID         string
+	tapDev          *tap.Device
+	router          *switchboard.Router
+	client          *steam.Client
+	table           *switchboard.Table
+	wg              sync.WaitGroup
+	cancelFunc      context.CancelFunc
+	bootstrapPeerID uint64
 }
 
 func NewFacade(config Config) (*Facade, error) {
@@ -50,14 +52,15 @@ func NewFacade(config Config) (*Facade, error) {
 	log.Printf("SteamBridge is live on interface '%s'! Press Ctrl+C to exit.\n", config.IfaceName)
 
 	return &Facade{
-		ifaceName:  config.IfaceName,
-		ifaceID:    config.IfaceID,
-		tapDev:     tapDev,
-		router:     router,
-		client:     client,
-		table:      table,
-		wg:         sync.WaitGroup{},
-		cancelFunc: nil,
+		ifaceName:       config.IfaceName,
+		ifaceID:         config.IfaceID,
+		tapDev:          tapDev,
+		router:          router,
+		client:          client,
+		table:           table,
+		wg:              sync.WaitGroup{},
+		cancelFunc:      nil,
+		bootstrapPeerID: config.BootstrapPeerID,
 	}, nil
 }
 
@@ -74,6 +77,12 @@ func (f *Facade) Start(ctx context.Context) error {
 		defer f.wg.Done()
 		f.client.ReadLoop(engineCtx)
 	}()
+
+	if f.bootstrapPeerID != 0 {
+		f.client.SendControlMessage(f.bootstrapPeerID, protocol.ActionRequestIP, 0)
+		log.Printf("Bootstrapped peer %v. Requesting IP address...", f.bootstrapPeerID)
+	}
+
 	return nil
 }
 
