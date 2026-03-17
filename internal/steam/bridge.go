@@ -13,7 +13,7 @@ var (
 	bridgeShutdown     func()
 
 	bridgeReceive func(buffer *byte, bufferSize int, outSteamIDRemote *uint64) int32
-	bridgeSend    func(steamId uint64, data *byte, size int, sendType int) bool
+	bridgeSend    func(steamId uint64, data *byte, size int) bool
 )
 
 func LoadLibrary() error {

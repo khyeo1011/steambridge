@@ -28,15 +28,9 @@ BRIDGE_EXPORT void Bridge_Shutdown() {
     SteamAPI_Shutdown();
 }
 
-BRIDGE_EXPORT bool Bridge_Send(uint64_t steamId, const uint8_t* data, int size, int sendType) {
+BRIDGE_EXPORT bool Bridge_Send(uint64_t steamId, const uint8_t* data, int size) {
     CSteamID remoteSteamID((uint64)steamId);
-    EP2PSend sendTypeEnum;
-    if (sendType == 0) {
-        sendTypeEnum = k_EP2PSendUnreliableNoDelay;
-    } else {
-        sendTypeEnum = k_EP2PSendReliable;
-    }
-    return SteamNetworking()->SendP2PPacket(remoteSteamID, data, size, sendTypeEnum);
+    return SteamNetworking()->SendP2PPacket(remoteSteamID, data, size, k_EP2PSendUnreliable);
 }
 
 BRIDGE_EXPORT int Bridge_Receive(uint8_t* buffer, int bufferSize, uint64_t * outSteamIDRemote) {

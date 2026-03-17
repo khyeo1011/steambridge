@@ -2,7 +2,9 @@ package steam
 
 import (
 	"context"
+	"encoding/binary"
 	"log"
+	"steambridge/internal/protocol"
 	"steambridge/internal/switchboard"
 	"sync"
 	"time"
@@ -36,22 +38,22 @@ func (c *Client) AddPeer(steamID uint64) {
 	c.steamIDs[steamID] = true
 }
 
-func (c *Client) SendToPeer(steamID uint64, frame []byte, reliable bool) {
+func (c *Client) SendToPeer(steamID uint64, frame []byte) {
 	if len(frame) == 0 {
 		return
 	}
 
-	sendType := 0
+	// sendType := 0
 	// Let TCP handle reliability
 	// if reliable {
 	// 	sendType = 1
 	// }
 
-	bridgeSend(steamID, &frame[0], len(frame), sendType)
+	bridgeSend(steamID, &frame[0], len(frame))
 }
 
-func (c *Client) SendToAll(frame []byte, reliable bool) {
-	sendType := 0
+func (c *Client) SendToAll(frame []byte) {
+	// sendType := 0
 	// Let TCP handle reliability
 	// if reliable {
 	// 	sendType = 1
@@ -61,7 +63,7 @@ func (c *Client) SendToAll(frame []byte, reliable bool) {
 	defer c.peermutex.RUnlock()
 
 	for steamID := range c.steamIDs {
-		bridgeSend(steamID, &frame[0], len(frame), sendType)
+		bridgeSend(steamID, &frame[0], len(frame))
 	}
 }
 
@@ -90,13 +92,57 @@ func (c *Client) ReadLoop(ctx context.Context) {
 			packetCopy := make([]byte, bytesRead)
 			copy(packetCopy, buffer[:bytesRead])
 
-			c.router.HandleIngress(remoteSteamID, packetCopy)
+			switch packetCopy[0] {
+			case protocol.PacketTypeData:
+				// Layer 2 Ethernet Frame, pass to TAP
+				// Go slicing is actually really efficient here because it creates a header instead of copying
+				c.router.HandleIngress(remoteSteamID, packetCopy[1:])
 
-			c.peermutex.Lock()
-			c.steamIDs[remoteSteamID] = true
-			c.peermutex.Unlock()
+				c.peermutex.Lock()
+				c.steamIDs[remoteSteamID] = true
+				c.peermutex.Unlock()
+			case protocol.PacketTypeControl:
+				// IPAM Control Message for IP address assignment.
+				if len(packetCopy) < 14 {
+					log.Printf("Warning: Dropping undersized control frame (%d bytes)", len(packetCopy))
+					continue
+				}
+				msg := protocol.ControlMessage{
+					Action:  packetCopy[1],
+					IP:      binary.BigEndian.Uint32(packetCopy[2:6]),
+					SteamID: binary.BigEndian.Uint64(packetCopy[6:14]),
+				}
+				switch msg.Action {
+				case protocol.ActionRequestIP:
+					// TODO
+				case protocol.ActionOfferIP:
+					// TODO
+				case protocol.ActionAckIP:
+					// TODO
+				default:
+					// Invalid
+					log.Printf("Warning: Unknown control action '%s' from %v", msg.Action, remoteSteamID)
+				}
+			default:
+				// Invalid
+			}
+
 		}
 	}
+}
+
+func (c *Client) SendControlMessage(steamID uint64, action uint8, ip uint32) {
+	frame := make([]byte, 14)
+	frame[0] = protocol.PacketTypeControl
+	msg := protocol.ControlMessage{
+		Action:  action,
+		IP:      ip,
+		SteamID: steamID,
+	}
+	frame[1] = byte(msg.Action)
+	binary.BigEndian.PutUint32(frame[2:6], msg.IP)
+	binary.BigEndian.PutUint64(frame[6:14], msg.SteamID)
+	c.SendToPeer(steamID, frame)
 }
 
 func (c *Client) Close() {

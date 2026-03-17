@@ -3,12 +3,13 @@ package switchboard
 import (
 	"context"
 	"steambridge/internal/dpi"
+	"steambridge/internal/protocol"
 	"steambridge/internal/tap"
 )
 
 type SteamSender interface {
-	SendToPeer(steamID uint64, frame []byte, reliable bool)
-	SendToAll(frame []byte, reliable bool)
+	SendToPeer(steamID uint64, frame []byte)
+	SendToAll(frame []byte)
 }
 
 type Router struct {
@@ -44,33 +45,31 @@ func (r *Router) StartEgress(ctx context.Context) {
 	frame := make([]byte, 2048)
 
 	for {
-		n, err := r.tap.Read(frame)
+		n, err := r.tap.Read(frame[1:])
 		if err != nil {
 			return
 		}
 		if n < 14 {
 			continue
 		}
-
-		if !dpi.IsValidLan(frame[:n]) {
+		if !dpi.IsValidLan(frame[1:]) {
 			continue
 		}
-
+		frame[0] = protocol.PacketTypeData
 		// Isolate the actual read bytes
-		payload := frame[:n]
-		reliable := dpi.IsReliable(payload)
+		payload := frame[:n+1]
 
 		var destMAC [6]byte
-		copy(destMAC[:], payload[0:6])
+		copy(destMAC[:], payload[1:7])
 
 		if destMAC == [6]byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF} {
-			r.steam.SendToAll(payload, reliable)
+			r.steam.SendToAll(payload)
 		} else {
 			steamID, ok := r.table.Lookup(destMAC)
 			if ok {
-				r.steam.SendToPeer(steamID, payload, reliable)
+				r.steam.SendToPeer(steamID, payload)
 			} else {
-				r.steam.SendToAll(payload, reliable)
+				r.steam.SendToAll(payload)
 			}
 		}
 
