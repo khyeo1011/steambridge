@@ -55,6 +55,13 @@ func (c *Client) SendToPeer(steamID uint64, frame []byte) {
 	bridgeSend(steamID, &frame[0], len(frame))
 }
 
+func (c *Client) SendToPeerReliable(steamID uint64, frame []byte) {
+	if len(frame) == 0 {
+		return
+	}
+	bridgeSendReliable(steamID, &frame[0], len(frame))
+}
+
 func (c *Client) SendToAll(frame []byte) {
 	// sendType := 0
 	// Let TCP handle reliability
@@ -145,7 +152,7 @@ func (c *Client) SendControlMessage(steamID uint64, action uint8, ip uint32) {
 	frame[0] = protocol.PacketTypeControl
 	frame[1] = byte(action)
 	binary.BigEndian.PutUint32(frame[2:6], ip)
-	c.SendToPeer(steamID, frame)
+	c.SendToPeerReliable(steamID, frame)
 }
 
 func (c *Client) Close() {
