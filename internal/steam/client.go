@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"log"
+	"steambridge/internal/ipam"
 	"steambridge/internal/protocol"
 	"steambridge/internal/switchboard"
 	"sync"
@@ -14,6 +15,7 @@ type Client struct {
 	router    *switchboard.Router
 	peermutex sync.RWMutex
 	steamIDs  map[uint64]bool
+	ipPool    *ipam.Pool
 }
 
 func NewClient(router *switchboard.Router) *Client {
@@ -29,6 +31,7 @@ func NewClient(router *switchboard.Router) *Client {
 	return &Client{
 		router:   router,
 		steamIDs: make(map[uint64]bool),
+		ipPool:   ipam.NewPool(),
 	}
 }
 
@@ -50,6 +53,13 @@ func (c *Client) SendToPeer(steamID uint64, frame []byte) {
 	// }
 
 	bridgeSend(steamID, &frame[0], len(frame))
+}
+
+func (c *Client) SendToPeerReliable(steamID uint64, frame []byte) {
+	if len(frame) == 0 {
+		return
+	}
+	bridgeSendReliable(steamID, &frame[0], len(frame))
 }
 
 func (c *Client) SendToAll(frame []byte) {
@@ -103,25 +113,31 @@ func (c *Client) ReadLoop(ctx context.Context) {
 				c.peermutex.Unlock()
 			case protocol.PacketTypeControl:
 				// IPAM Control Message for IP address assignment.
-				if len(packetCopy) < 14 {
+				if len(packetCopy) < 6 {
 					log.Printf("Warning: Dropping undersized control frame (%d bytes)", len(packetCopy))
 					continue
 				}
 				msg := protocol.ControlMessage{
-					Action:  packetCopy[1],
-					IP:      binary.BigEndian.Uint32(packetCopy[2:6]),
-					SteamID: binary.BigEndian.Uint64(packetCopy[6:14]),
+					Action: packetCopy[1],
+					IP:     binary.BigEndian.Uint32(packetCopy[2:6]),
 				}
 				switch msg.Action {
 				case protocol.ActionRequestIP:
-					// TODO
+					assignedIP := c.ipPool.Allocate(remoteSteamID)
+					c.SendControlMessage(remoteSteamID, protocol.ActionOfferIP, assignedIP)
+					log.Printf("Assigned IP %s to %v", ipam.IntIPtoString(assignedIP), remoteSteamID)
 				case protocol.ActionOfferIP:
-					// TODO
+					err := setTAPIP(msg.IP, c.router.GetTap())
+					if err != nil {
+						// TODO: error handling
+					}
+					log.Printf("Received IP %s from %v", ipam.IntIPtoString(msg.IP), remoteSteamID)
+					c.SendControlMessage(remoteSteamID, protocol.ActionAckIP, msg.IP)
 				case protocol.ActionAckIP:
-					// TODO
+					log.Printf("Received ACK for IP %s from %v", ipam.IntIPtoString(msg.IP), remoteSteamID)
 				default:
 					// Invalid
-					log.Printf("Warning: Unknown control action '%s' from %v", msg.Action, remoteSteamID)
+					log.Printf("Warning: Unknown control action '%d' from %v", msg.Action, remoteSteamID)
 				}
 			default:
 				// Invalid
@@ -132,17 +148,11 @@ func (c *Client) ReadLoop(ctx context.Context) {
 }
 
 func (c *Client) SendControlMessage(steamID uint64, action uint8, ip uint32) {
-	frame := make([]byte, 14)
+	frame := make([]byte, 6)
 	frame[0] = protocol.PacketTypeControl
-	msg := protocol.ControlMessage{
-		Action:  action,
-		IP:      ip,
-		SteamID: steamID,
-	}
-	frame[1] = byte(msg.Action)
-	binary.BigEndian.PutUint32(frame[2:6], msg.IP)
-	binary.BigEndian.PutUint64(frame[6:14], msg.SteamID)
-	c.SendToPeer(steamID, frame)
+	frame[1] = byte(action)
+	binary.BigEndian.PutUint32(frame[2:6], ip)
+	c.SendToPeerReliable(steamID, frame)
 }
 
 func (c *Client) Close() {

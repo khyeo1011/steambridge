@@ -12,17 +12,19 @@ var (
 	bridgeRunCallbacks func()
 	bridgeShutdown     func()
 
-	bridgeReceive func(buffer *byte, bufferSize int, outSteamIDRemote *uint64) int32
-	bridgeSend    func(steamId uint64, data *byte, size int) bool
+	bridgeReceive      func(buffer *byte, bufferSize int, outSteamIDRemote *uint64) int32
+	bridgeSend         func(steamId uint64, data *byte, size int) bool
+	bridgeSendReliable func(steamId uint64, data *byte, size int) bool
 )
 
 func LoadLibrary() error {
 	var target string
-	if runtime.GOOS == "windows" {
+	switch runtime.GOOS {
+	case "windows":
 		target = "libsteam_bridge.dll"
-	} else if runtime.GOOS == "linux" {
+	case "linux":
 		target = "./libsteam_bridge.so"
-	} else {
+	default:
 		return errors.New("unsupported OS")
 	}
 
@@ -33,6 +35,7 @@ func LoadLibrary() error {
 	purego.RegisterLibFunc(&bridgeShutdown, libc, "Bridge_Shutdown")
 	purego.RegisterLibFunc(&bridgeReceive, libc, "Bridge_Receive")
 	purego.RegisterLibFunc(&bridgeSend, libc, "Bridge_Send")
+	purego.RegisterLibFunc(&bridgeSendReliable, libc, "Bridge_SendReliable")
 
 	return err
 }

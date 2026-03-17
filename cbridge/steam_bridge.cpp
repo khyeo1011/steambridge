@@ -33,6 +33,11 @@ BRIDGE_EXPORT bool Bridge_Send(uint64_t steamId, const uint8_t* data, int size) 
     return SteamNetworking()->SendP2PPacket(remoteSteamID, data, size, k_EP2PSendUnreliable);
 }
 
+BRIDGE_EXPORT bool Bridge_SendReliable(uint64_t steamId, const uint8_t* data, int size) {
+    CSteamID remoteSteamID((uint64)steamId);
+    return SteamNetworking()->SendP2PPacket(remoteSteamID, data, size, k_EP2PSendReliable);
+}
+
 BRIDGE_EXPORT int Bridge_Receive(uint8_t* buffer, int bufferSize, uint64_t * outSteamIDRemote) {
     uint32_t msgSize;
     if (!SteamNetworking()->IsP2PPacketAvailable(&msgSize, 0)) {

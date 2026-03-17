@@ -14,6 +14,8 @@ BRIDGE_EXPORT void Bridge_Shutdown();
 
 BRIDGE_EXPORT bool Bridge_Send(uint64_t steamId, const uint8_t* data, int size);
 
+BRIDGE_EXPORT bool Bridge_SendReliable(uint64_t steamId, const uint8_t* data, int size);
+
 BRIDGE_EXPORT int Bridge_Receive(uint8_t* buffer, int bufferSize, uint64_t * outSteamIDRemote);
 
 BRIDGE_EXPORT void Bridge_RunCallbacks();

@@ -32,9 +32,12 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 
-	if err := facade.Start(ctx); err != nil { /* log fatal */
-		log.Fatalf("Error starting facade: %s", err)
-	}
+	go func() {
+		if err := facade.Start(ctx); err != nil {
+			log.Printf("facade stopped: %s", err)
+			cancel()
+		}
+	}()
 
 	<-ctx.Done()
 

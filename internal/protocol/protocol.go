@@ -6,9 +6,8 @@ const (
 )
 
 type ControlMessage struct {
-	Action  uint8  `json:"action"`
-	IP      uint32 `json:"ip"`
-	SteamID uint64 `json:"steamid"`
+	Action uint8  `json:"action"`
+	IP     uint32 `json:"ip"`
 }
 
 const (
