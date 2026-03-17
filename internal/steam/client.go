@@ -124,8 +124,10 @@ func (c *Client) ReadLoop(ctx context.Context) {
 					if err != nil {
 						// TODO: error handling
 					}
+					log.Printf("Received IP %d from %v", msg.IP, remoteSteamID)
+					c.SendControlMessage(remoteSteamID, protocol.ActionAckIP, msg.IP)
 				case protocol.ActionAckIP:
-					// TODO
+					log.Printf("Received ACK for IP %d from %v", msg.IP, remoteSteamID)
 				default:
 					// Invalid
 					log.Printf("Warning: Unknown control action '%d' from %v", msg.Action, remoteSteamID)

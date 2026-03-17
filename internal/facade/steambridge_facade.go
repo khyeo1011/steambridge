@@ -90,7 +90,6 @@ func (f *Facade) Stop() error {
 	if f.cancelFunc != nil {
 		f.cancelFunc()
 	}
-	f.wg.Wait()
 
 	if f.tapDev != nil {
 		f.tapDev.Close()
@@ -99,6 +98,8 @@ func (f *Facade) Stop() error {
 	if f.client != nil {
 		f.client.Close()
 	}
+
+	f.wg.Wait()
 
 	return nil
 }
