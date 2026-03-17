@@ -8,7 +8,7 @@ require (
 )
 
 require (
-	github.com/ebitengine/purego v0.10.0 // indirect
+	github.com/ebitengine/purego v0.10.0 // direct
 	github.com/vishvananda/netns v0.0.5 // indirect
 	golang.org/x/sys v0.25.0 // indirect
 )

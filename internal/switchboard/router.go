@@ -1,6 +1,7 @@
 package switchboard
 
 import (
+	"context"
 	"steambridge/internal/dpi"
 	"steambridge/internal/tap"
 )
@@ -39,7 +40,7 @@ func (r *Router) HandleIngress(senderID uint64, frame []byte) {
 	r.tap.Write(frame)
 }
 
-func (r *Router) StartEgress() {
+func (r *Router) StartEgress(ctx context.Context) {
 	frame := make([]byte, 2048)
 
 	for {
@@ -72,7 +73,9 @@ func (r *Router) StartEgress() {
 				r.steam.SendToAll(payload, reliable)
 			}
 		}
+
 	}
+
 }
 
 func (r *Router) SetSteamSender(s SteamSender) {

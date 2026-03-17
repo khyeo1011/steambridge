@@ -1,56 +1,46 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"steambridge/internal/steam"
-	"steambridge/internal/switchboard"
-	"steambridge/internal/tap"
+	"steambridge/internal/facade"
 )
 
 func main() {
-	ifaceName := flag.String("iface", "steambridge0", "Name of the TAP interface to create/bind")
+	ifaceName := flag.String("ifaceName", "steambridge0", "Name of the TAP interface to create/bind")
+	ifaceID := flag.String("ifaceID", "steambridge0", "ID of the TAP interface to create/bind")
 	peerID := flag.Uint64("peer", 0, "SteamID of the remote peer to bootstrap")
 	flag.Parse()
 	log.Println("Starting SteamBridge...")
 
-	table := switchboard.NewTable()
+	config := facade.Config{
+		IfaceName:       *ifaceName,
+		IfaceID:         *ifaceID,
+		BootstrapPeerID: *peerID,
+	}
 
-	log.Printf("Setting up TAP interface: %s\n", *ifaceName)
-	tapDev, err := tap.NewDevice(*ifaceName)
+	facade, err := facade.NewFacade(config)
 	if err != nil {
-		log.Fatalf("Fatal: Could not create TAP device: %v", err)
-	}
-	defer tapDev.Close()
-
-	router := switchboard.NewRouter(tapDev, nil, table)
-
-	log.Println("Initializing Steamworks API...")
-	client := steam.NewClient(router)
-
-	if *peerID != 0 {
-		client.AddPeer(*peerID)
+		log.Fatalf("Error creating facade: %s", err)
 	}
 
-	router.SetSteamSender(client)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
 
-	log.Println("Starting Egress and Ingress routing loops...")
-	go router.StartEgress()
-	go client.ReadLoop()
+	if err := facade.Start(ctx); err != nil { /* log fatal */
+		log.Fatalf("Error starting facade: %s", err)
+	}
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	<-ctx.Done()
 
-	log.Printf("SteamBridge is live on interface '%s'! Press Ctrl+C to exit.\n", *ifaceName)
-	<-sigCh
+	facade.Stop()
 
 	log.Println("\nReceived shutdown signal. Closing bridge...")
-
-	client.Close()
 
 	log.Println("Shutdown complete.")
 }

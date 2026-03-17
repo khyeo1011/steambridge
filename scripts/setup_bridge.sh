@@ -18,7 +18,7 @@ echo "cleaning up interfaces that might not have been deleted"
 sudo ip link delete "$INTERFACE" 2>/dev/null
 echo "Starting SteamBridge for peer $PEER_ID..."
 cd "$PROJECT_ROOT" || exit
-sudo go run cmd/steambridge/main.go --iface "$INTERFACE" --peer "$PEER_ID" &
+sudo go run cmd/steambridge/main.go --ifaceName "$INTERFACE" --peer "$PEER_ID" &
 BRIDGE_PID=$!
 
 echo "Waiting for $INTERFACE to initialize..."

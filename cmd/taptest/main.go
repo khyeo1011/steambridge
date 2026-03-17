@@ -8,10 +8,10 @@ import (
 )
 
 func main() {
-	iface := "steambridge0"
-	fmt.Printf("Attempting to open TAP device: %s...\n", iface)
+	ifaceID := "steambridge0"
+	fmt.Printf("Attempting to open TAP device: %s...\n", ifaceID)
 
-	dev, err := tap.NewDevice(iface)
+	dev, err := tap.NewDevice("steambridge0", ifaceID)
 	if err != nil {
 		log.Fatalf("❌ Failed to open TAP: %v", err)
 	}
