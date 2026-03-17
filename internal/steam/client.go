@@ -125,16 +125,16 @@ func (c *Client) ReadLoop(ctx context.Context) {
 				case protocol.ActionRequestIP:
 					assignedIP := c.ipPool.Allocate(remoteSteamID)
 					c.SendControlMessage(remoteSteamID, protocol.ActionOfferIP, assignedIP)
-					log.Printf("Assigned IP %d to %v", assignedIP, remoteSteamID)
+					log.Printf("Assigned IP %s to %v", ipam.IntIPtoString(assignedIP), remoteSteamID)
 				case protocol.ActionOfferIP:
 					err := setTAPIP(msg.IP, c.router.GetTap())
 					if err != nil {
 						// TODO: error handling
 					}
-					log.Printf("Received IP %d from %v", msg.IP, remoteSteamID)
+					log.Printf("Received IP %s from %v", ipam.IntIPtoString(msg.IP), remoteSteamID)
 					c.SendControlMessage(remoteSteamID, protocol.ActionAckIP, msg.IP)
 				case protocol.ActionAckIP:
-					log.Printf("Received ACK for IP %d from %v", msg.IP, remoteSteamID)
+					log.Printf("Received ACK for IP %s from %v", ipam.IntIPtoString(msg.IP), remoteSteamID)
 				default:
 					// Invalid
 					log.Printf("Warning: Unknown control action '%d' from %v", msg.Action, remoteSteamID)
