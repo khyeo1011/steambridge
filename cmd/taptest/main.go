@@ -8,7 +8,7 @@ import (
 )
 
 func main() {
-	ifaceID := "steambridge0"
+	ifaceID := ""
 	fmt.Printf("Attempting to open TAP device: %s...\n", ifaceID)
 
 	dev, err := tap.NewDevice("steambridge0", ifaceID)

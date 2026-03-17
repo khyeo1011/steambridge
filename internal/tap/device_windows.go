@@ -9,16 +9,12 @@ import (
 	"github.com/songgao/water"
 )
 
-func getWaterConfig(ifaceName string, ifaceID string) water.Config {
-	if ifaceID == "" {
-		return water.Config{
-			DeviceType: water.TAP,
-		}
-	}
+func getWaterConfig(ifaceName string) water.Config {
 	return water.Config{
 		DeviceType: water.TAP,
 		PlatformSpecificParams: water.PlatformSpecificParams{
-			ComponentID: ifaceID,
+			InterfaceName: ifaceName,
+			ComponentID:   "tap0901",
 		},
 	}
 }
