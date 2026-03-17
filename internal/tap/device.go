@@ -7,7 +7,7 @@ import (
 	"github.com/songgao/water"
 )
 
-const MAXMTU = 1500
+const MAXMTU = 1200
 
 type Device struct {
 	*water.Interface
