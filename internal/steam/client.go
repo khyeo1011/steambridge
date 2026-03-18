@@ -132,7 +132,7 @@ func (c *Client) ReadLoop(ctx context.Context) {
 					if err != nil {
 						c.SendControlMessage(remoteSteamID, protocol.ActionNackIP, 0)
 					}
-					found := false
+					assigned := false
 					for i := 0; i < 3; i++ {
 						iface, err := net.InterfaceByName(c.router.GetTap().Name())
 						addrs, err := iface.Addrs()
@@ -145,26 +145,27 @@ func (c *Client) ReadLoop(ctx context.Context) {
 								if ipnet.IP.String() == ipam.IntIPtoString(msg.IP) {
 									log.Printf("Received IP %s from %v", ipam.IntIPtoString(msg.IP), remoteSteamID)
 									c.SendControlMessage(remoteSteamID, protocol.ActionAckIP, msg.IP)
-									found = true
+									assigned = true
 									break
 								}
 							}
 						}
-						if found {
+						if assigned {
 							break
 						}
 						time.Sleep(time.Second)
 					}
-					if !found {
+					if !assigned {
 						c.SendControlMessage(remoteSteamID, protocol.ActionNackIP, msg.IP)
 					}
 				case protocol.ActionAckIP:
 					log.Printf("Received ACK for IP %s from %v", ipam.IntIPtoString(msg.IP), remoteSteamID)
-
 				case protocol.ActionNackIP:
 					if msg.IP != 0 {
+						c.ipPool.Release(msg.IP)
+						log.Printf("Releasing IP %s", ipam.IntIPtoString(msg.IP))
 					} else {
-
+						log.Printf("Peceived 0 as nack op")
 					}
 				default:
 					// Invalid
