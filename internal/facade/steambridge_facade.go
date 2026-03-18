@@ -106,3 +106,11 @@ func (f *Facade) Stop() error {
 
 	return nil
 }
+
+func (f *Facade) AddPort(port uint16) {
+	f.router.AddPort(port)
+}
+
+func (f *Facade) RemovePort(port uint16) {
+	f.router.RemovePort(port)
+}

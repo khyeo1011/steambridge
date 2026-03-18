@@ -2,6 +2,7 @@ package dpi
 
 import (
 	"encoding/binary"
+	"sync"
 )
 
 func IsReliable(frame []byte) bool {
@@ -56,4 +57,51 @@ func IsValidLan(frame []byte) bool {
 		// Drop everything else (IPv6, STP, LLDP, etc.) to keep the tunnel quiet
 		return false
 	}
+}
+
+func IsAllowedPort(frame []byte, allowedPorts *sync.Map) bool {
+	if len(frame) < 14 {
+		return false
+	}
+
+	etherType := binary.BigEndian.Uint16(frame[12:14])
+
+	if etherType == 0x0806 {
+		return true
+	}
+
+	if etherType != 0x0800 {
+		return false
+	}
+
+	if len(frame) < 34 {
+		return false
+	}
+	ipHeaderInfo := frame[14]
+	ipHeaderLen := (ipHeaderInfo & 0x0F) * 4
+
+	// 6 = TCP; 17 = UDP
+	protocolInfo := frame[14+9]
+	if protocolInfo != 6 && protocolInfo != 17 {
+		return false
+	}
+	level4Offset := 14 + ipHeaderLen
+
+	if len(frame) < int(level4Offset)+4 {
+		return false
+	}
+
+	sourcePort := binary.BigEndian.Uint16(frame[level4Offset : level4Offset+2])
+	destPort := binary.BigEndian.Uint16(frame[level4Offset+2 : level4Offset+4])
+	srcRes, srcOk := allowedPorts.Load(sourcePort)
+	if srcOk && srcRes.(bool) {
+		return true
+	}
+
+	dstRes, dstOk := allowedPorts.Load(destPort)
+	if dstOk && dstRes.(bool) {
+		return true
+	}
+
+	return false
 }

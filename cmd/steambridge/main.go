@@ -28,6 +28,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error creating facade: %s", err)
 	}
+	facade.AddPort(80)
+	facade.AddPort(443)
+	facade.AddPort(3000)
+	facade.AddPort(5021)
+	facade.AddPort(5000)
+	facade.AddPort(25565)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()

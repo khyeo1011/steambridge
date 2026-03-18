@@ -5,6 +5,7 @@ import (
 	"steambridge/internal/dpi"
 	"steambridge/internal/protocol"
 	"steambridge/internal/tap"
+	"sync"
 )
 
 type SteamSender interface {
@@ -13,21 +14,26 @@ type SteamSender interface {
 }
 
 type Router struct {
-	tap   *tap.Device
-	steam SteamSender
-	table *Table
+	tap          *tap.Device
+	steam        SteamSender
+	table        *Table
+	allowedPorts sync.Map
 }
 
 func NewRouter(tap *tap.Device, steam SteamSender, table *Table) *Router {
 	return &Router{
-		tap:   tap,
-		steam: steam,
-		table: table,
+		tap:          tap,
+		steam:        steam,
+		table:        table,
+		allowedPorts: sync.Map{},
 	}
 }
 
 func (r *Router) HandleIngress(senderID uint64, frame []byte) {
 	if len(frame) < 14 {
+		return
+	}
+	if !dpi.IsAllowedPort(frame, &r.allowedPorts) {
 		return
 	}
 	if len(frame) < 60 {
@@ -53,6 +59,9 @@ func (r *Router) StartEgress(ctx context.Context) {
 			continue
 		}
 		if !dpi.IsValidLan(frame[1:]) {
+			continue
+		}
+		if !dpi.IsAllowedPort(frame[1:], &r.allowedPorts) {
 			continue
 		}
 		frame[0] = protocol.PacketTypeData
@@ -83,4 +92,12 @@ func (r *Router) SetSteamSender(s SteamSender) {
 
 func (r *Router) GetTap() *tap.Device {
 	return r.tap
+}
+
+func (r *Router) AddPort(port uint16) {
+	r.allowedPorts.Store(port, true)
+}
+
+func (r *Router) RemovePort(port uint16) {
+	r.allowedPorts.Delete(port)
 }
