@@ -15,8 +15,9 @@ func main() {
 	ifaceName := flag.String("ifaceName", "steambridge0", "Name of the TAP interface to create/bind")
 	ifaceID := flag.String("ifaceID", "steambridge0", "ID of the TAP interface to create/bind")
 	peerID := flag.Uint64("peer", 0, "SteamID of the remote peer to bootstrap")
-	enableFirewall := flag.Bool("firewall", true, "Enable firewall")
+	enableFirewall := flag.Bool("firewall", false, "Enable firewall")
 	flag.Parse()
+	log.Printf("Firewall enabled: %t", *enableFirewall)
 	log.Println("Starting SteamBridge...")
 
 	config := facade.Config{
