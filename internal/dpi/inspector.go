@@ -82,6 +82,9 @@ func IsAllowedPort(frame []byte, allowedPorts *sync.Map) bool {
 
 	// 6 = TCP; 17 = UDP
 	protocolInfo := frame[14+9]
+	if protocolInfo == 1 {
+		return true
+	}
 	if protocolInfo != 6 && protocolInfo != 17 {
 		return false
 	}
