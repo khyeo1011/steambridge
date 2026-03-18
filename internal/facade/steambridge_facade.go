@@ -87,6 +87,9 @@ func (f *Facade) Start(ctx context.Context) error {
 }
 
 func (f *Facade) Stop() error {
+	if f.bootstrapPeerID != 0 {
+		f.client.SendControlMessage(f.bootstrapPeerID, protocol.ActionNackIP, 0)
+	}
 	if f.cancelFunc != nil {
 		f.cancelFunc()
 	}
@@ -102,4 +105,16 @@ func (f *Facade) Stop() error {
 	f.wg.Wait()
 
 	return nil
+}
+
+func (f *Facade) AddPort(port uint16) {
+	f.router.AddPort(port)
+}
+
+func (f *Facade) RemovePort(port uint16) {
+	f.router.RemovePort(port)
+}
+
+func (f *Facade) SetFirewall(enabled bool) {
+	f.router.SetFirewall(enabled)
 }
