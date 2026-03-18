@@ -14,4 +14,5 @@ const (
 	ActionRequestIP = 0
 	ActionOfferIP   = 1
 	ActionAckIP     = 2
+	ActionNackIP    = 3
 )

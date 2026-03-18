@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"log"
+	"net"
 	"steambridge/internal/ipam"
 	"steambridge/internal/protocol"
 	"steambridge/internal/switchboard"
@@ -129,12 +130,42 @@ func (c *Client) ReadLoop(ctx context.Context) {
 				case protocol.ActionOfferIP:
 					err := setTAPIP(msg.IP, c.router.GetTap())
 					if err != nil {
-						// TODO: error handling
+						c.SendControlMessage(remoteSteamID, protocol.ActionNackIP, 0)
 					}
-					log.Printf("Received IP %s from %v", ipam.IntIPtoString(msg.IP), remoteSteamID)
-					c.SendControlMessage(remoteSteamID, protocol.ActionAckIP, msg.IP)
+					found := false
+					for i := 0; i < 3; i++ {
+						iface, err := net.InterfaceByName(c.router.GetTap().Name())
+						addrs, err := iface.Addrs()
+						if err != nil {
+							log.Printf("Error getting addresses")
+							continue
+						}
+						for _, addr := range addrs {
+							if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+								if ipnet.IP.String() == ipam.IntIPtoString(msg.IP) {
+									log.Printf("Received IP %s from %v", ipam.IntIPtoString(msg.IP), remoteSteamID)
+									c.SendControlMessage(remoteSteamID, protocol.ActionAckIP, msg.IP)
+									found = true
+									break
+								}
+							}
+						}
+						if found {
+							break
+						}
+						time.Sleep(time.Second)
+					}
+					if !found {
+						c.SendControlMessage(remoteSteamID, protocol.ActionNackIP, msg.IP)
+					}
 				case protocol.ActionAckIP:
 					log.Printf("Received ACK for IP %s from %v", ipam.IntIPtoString(msg.IP), remoteSteamID)
+
+				case protocol.ActionNackIP:
+					if msg.IP != 0 {
+					} else {
+
+					}
 				default:
 					// Invalid
 					log.Printf("Warning: Unknown control action '%d' from %v", msg.Action, remoteSteamID)
