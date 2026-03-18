@@ -131,6 +131,7 @@ func (c *Client) ReadLoop(ctx context.Context) {
 					err := setTAPIP(msg.IP, c.router.GetTap())
 					if err != nil {
 						c.SendControlMessage(remoteSteamID, protocol.ActionNackIP, 0)
+						continue
 					}
 					assigned := false
 					for i := 0; i < 3; i++ {
