@@ -1,13 +1,13 @@
 # SteamBridge
 
-[!NOTE]
-Still very WIP and only has a CLI, that will be hard to set up without instructions.
+> [!NOTE]
+> Still very WIP and only has a CLI, that will be hard to set up without instructions.
 
 SteamBridge is a high-performance, custom Layer 2/Layer 4 virtual tunneling application written in Go. It routes raw Ethernet frames over the Steam P2P network (via the Steamworks SDK), effectively turning the Steam backbone into a zero-configuration, secure Virtual Private LAN for gaming, or if you wish, personal use.
 
 
 
-## 🚀 Core Features
+## Core Features
 
 * **Memory-Safe Hot Path:** SteamBridge is engineered to route packets without allocating structs or copying payloads unnecessarily. It uses exact slice windowing and direct bitwise operations to jump headers and inspect frames.
 
