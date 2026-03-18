@@ -87,6 +87,9 @@ func (f *Facade) Start(ctx context.Context) error {
 }
 
 func (f *Facade) Stop() error {
+	if f.bootstrapPeerID != 0 {
+		f.client.SendControlMessage(f.bootstrapPeerID, protocol.ActionNackIP, 0)
+	}
 	if f.cancelFunc != nil {
 		f.cancelFunc()
 	}
