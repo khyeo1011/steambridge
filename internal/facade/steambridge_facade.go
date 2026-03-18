@@ -114,3 +114,7 @@ func (f *Facade) AddPort(port uint16) {
 func (f *Facade) RemovePort(port uint16) {
 	f.router.RemovePort(port)
 }
+
+func (f *Facade) SetFirewall(enabled bool) {
+	f.router.SetFirewall(enabled)
+}

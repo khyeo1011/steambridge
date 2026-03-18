@@ -6,6 +6,7 @@ import (
 	"steambridge/internal/protocol"
 	"steambridge/internal/tap"
 	"sync"
+	"sync/atomic"
 )
 
 type SteamSender interface {
@@ -14,18 +15,20 @@ type SteamSender interface {
 }
 
 type Router struct {
-	tap          *tap.Device
-	steam        SteamSender
-	table        *Table
-	allowedPorts sync.Map
+	tap             *tap.Device
+	steam           SteamSender
+	table           *Table
+	allowedPorts    sync.Map
+	firewallEnabled atomic.Bool
 }
 
 func NewRouter(tap *tap.Device, steam SteamSender, table *Table) *Router {
 	return &Router{
-		tap:          tap,
-		steam:        steam,
-		table:        table,
-		allowedPorts: sync.Map{},
+		tap:             tap,
+		steam:           steam,
+		table:           table,
+		allowedPorts:    sync.Map{},
+		firewallEnabled: atomic.Bool{},
 	}
 }
 
@@ -33,7 +36,7 @@ func (r *Router) HandleIngress(senderID uint64, frame []byte) {
 	if len(frame) < 14 {
 		return
 	}
-	if !dpi.IsAllowedPort(frame, &r.allowedPorts) {
+	if r.firewallEnabled.Load() && !dpi.IsAllowedPort(frame, &r.allowedPorts) {
 		return
 	}
 	if len(frame) < 60 {
@@ -61,7 +64,7 @@ func (r *Router) StartEgress(ctx context.Context) {
 		if !dpi.IsValidLan(frame[1:]) {
 			continue
 		}
-		if !dpi.IsAllowedPort(frame[1:], &r.allowedPorts) {
+		if r.firewallEnabled.Load() && !dpi.IsAllowedPort(frame[1:], &r.allowedPorts) {
 			continue
 		}
 		frame[0] = protocol.PacketTypeData
@@ -100,4 +103,8 @@ func (r *Router) AddPort(port uint16) {
 
 func (r *Router) RemovePort(port uint16) {
 	r.allowedPorts.Delete(port)
+}
+
+func (r *Router) SetFirewall(enabled bool) {
+	r.firewallEnabled.Store(enabled)
 }
