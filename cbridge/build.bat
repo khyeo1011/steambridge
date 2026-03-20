@@ -1,7 +1,7 @@
 @echo off
 REM Create the build directory and generate build files
 echo Generating build system...
-cmake -B ../build
+cmake -B ./build
 
 REM Check if the previous command succeeded
 if %ERRORLEVEL% NEQ 0 (
@@ -13,7 +13,7 @@ if %ERRORLEVEL% NEQ 0 (
 REM Build the default target (auto-resolves ALL_BUILD vs all)
 echo.
 echo Building target...
-cmake --build ../build/ --config Release
+cmake --build ./build/ --config Release
 
 REM Final status check
 if %ERRORLEVEL% EQU 0 (

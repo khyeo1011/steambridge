@@ -23,6 +23,7 @@ jobs:
       env:
         SDK_PASS: ${{ secrets.SDK_PASSPHRASE }}
       run: |
+        cd cbridge
         echo "Decrypting SDK vault..."
         gpg --quiet --batch --yes --decrypt --passphrase="$SDK_PASS" --output sdk.zip steamworks_sdk.zip.gpg
         
@@ -60,6 +61,9 @@ jobs:
     - name: Build Go Router
       run: |
         go build ./cmd/steambridge
+    
+    - name: Build Wails
+        wails build
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
