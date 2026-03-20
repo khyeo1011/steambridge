@@ -9,7 +9,6 @@
   "frontend:dev:watcher": "npm run dev",
   "frontend:dev:serverUrl": "http://localhost:3000",
   "wailsjsdir": "frontend/wailsjs",
-  "maindir": "./cmd/app/",
   "author": {
     "name": "Sebastian Yeo",
     "email": "khyeo81@gmail.com"

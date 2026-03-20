@@ -1,8 +1,8 @@
 package main
 
 import (
+	"embed"
 	"log"
-	"steambridge/frontend/out"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/logger"
@@ -11,9 +11,10 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 )
 
-var assets out.Assets
+//go:embed all:frontend/out frontend/out/_next/static/*/* frontend/out/_next/static/*/*/*
+var assets embed.FS
 
-//go:embed ../build/appicon.png
+//go:embed build/appicon.png
 var icon []byte
 
 func main() {

@@ -37,19 +37,23 @@ export function LogFatal(message) {
 }
 
 export function EventsOnMultiple(eventName, callback, maxCallbacks) {
-    window.runtime.EventsOnMultiple(eventName, callback, maxCallbacks);
+    return window.runtime.EventsOnMultiple(eventName, callback, maxCallbacks);
 }
 
 export function EventsOn(eventName, callback) {
-    OnMultiple(eventName, callback, -1);
+    return EventsOnMultiple(eventName, callback, -1);
 }
 
-export function EventsOff(eventName) {
-    return window.runtime.EventsOff(eventName);
+export function EventsOff(eventName, ...additionalEventNames) {
+    return window.runtime.EventsOff(eventName, ...additionalEventNames);
+}
+
+export function EventsOffAll() {
+  return window.runtime.EventsOffAll();
 }
 
 export function EventsOnce(eventName, callback) {
-    OnMultiple(eventName, callback, 1);
+    return EventsOnMultiple(eventName, callback, 1);
 }
 
 export function EventsEmit(eventName) {
@@ -63,6 +67,10 @@ export function WindowReload() {
 
 export function WindowReloadApp() {
     window.runtime.WindowReloadApp();
+}
+
+export function WindowSetAlwaysOnTop(b) {
+    window.runtime.WindowSetAlwaysOnTop(b);
 }
 
 export function WindowSetSystemDefaultTheme() {
@@ -91,6 +99,10 @@ export function WindowFullscreen() {
 
 export function WindowUnfullscreen() {
     window.runtime.WindowUnfullscreen();
+}
+
+export function WindowIsFullscreen() {
+    return window.runtime.WindowIsFullscreen();
 }
 
 export function WindowGetSize() {
@@ -137,6 +149,10 @@ export function WindowUnmaximise() {
     window.runtime.WindowUnmaximise();
 }
 
+export function WindowIsMaximised() {
+    return window.runtime.WindowIsMaximised();
+}
+
 export function WindowMinimise() {
     window.runtime.WindowMinimise();
 }
@@ -145,8 +161,20 @@ export function WindowUnminimise() {
     window.runtime.WindowUnminimise();
 }
 
-export function WindowSetRGBA(RGBA) {
-    window.runtime.WindowSetRGBA(RGBA);
+export function WindowSetBackgroundColour(R, G, B, A) {
+    window.runtime.WindowSetBackgroundColour(R, G, B, A);
+}
+
+export function ScreenGetAll() {
+    return window.runtime.ScreenGetAll();
+}
+
+export function WindowIsMinimised() {
+    return window.runtime.WindowIsMinimised();
+}
+
+export function WindowIsNormal() {
+    return window.runtime.WindowIsNormal();
 }
 
 export function BrowserOpenURL(url) {
@@ -159,4 +187,56 @@ export function Environment() {
 
 export function Quit() {
     window.runtime.Quit();
+}
+
+export function Hide() {
+    window.runtime.Hide();
+}
+
+export function Show() {
+    window.runtime.Show();
+}
+
+export function ClipboardGetText() {
+    return window.runtime.ClipboardGetText();
+}
+
+export function ClipboardSetText(text) {
+    return window.runtime.ClipboardSetText(text);
+}
+
+/**
+ * Callback for OnFileDrop returns a slice of file path strings when a drop is finished.
+ *
+ * @export
+ * @callback OnFileDropCallback
+ * @param {number} x - x coordinate of the drop
+ * @param {number} y - y coordinate of the drop
+ * @param {string[]} paths - A list of file paths.
+ */
+
+/**
+ * OnFileDrop listens to drag and drop events and calls the callback with the coordinates of the drop and an array of path strings.
+ *
+ * @export
+ * @param {OnFileDropCallback} callback - Callback for OnFileDrop returns a slice of file path strings when a drop is finished.
+ * @param {boolean} [useDropTarget=true] - Only call the callback when the drop finished on an element that has the drop target style. (--wails-drop-target)
+ */
+export function OnFileDrop(callback, useDropTarget) {
+    return window.runtime.OnFileDrop(callback, useDropTarget);
+}
+
+/**
+ * OnFileDropOff removes the drag and drop listeners and handlers.
+ */
+export function OnFileDropOff() {
+    return window.runtime.OnFileDropOff();
+}
+
+export function CanResolveFilePaths() {
+    return window.runtime.CanResolveFilePaths();
+}
+
+export function ResolveFilePaths(files) {
+    return window.runtime.ResolveFilePaths(files);
 }
