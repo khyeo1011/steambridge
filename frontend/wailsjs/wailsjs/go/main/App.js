@@ -5,3 +5,11 @@
 export function Greet(arg1) {
   return window['go']['main']['App']['Greet'](arg1);
 }
+
+export function InitNetwork() {
+  return window['go']['main']['App']['InitNetwork']();
+}
+
+export function JoinLobby(arg1) {
+  return window['go']['main']['App']['JoinLobby'](arg1);
+}

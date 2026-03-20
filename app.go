@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"steambridge/internal/facade"
+	"steambridge/internal/utils"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App struct
@@ -19,25 +21,17 @@ func NewApp() *App {
 		IfaceID:         "tap0901",
 		BootstrapPeerID: 0,
 	}
-	facade, err := facade.NewFacade(config)
-	if err != nil {
-		log.Fatalf("Error creating facade: %s", err)
-	}
+	facade := facade.NewFacade(config)
 	return &App{facade: facade}
 }
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-
-	log.Println("Wails UI booting. Starting SteamBridge engine...")
-
-	if err := a.facade.Start(context.Background()); err != nil {
-		log.Fatalf("Error starting facade: %s", err)
-	}
-
 }
 
 func (a *App) domReady(ctx context.Context) {
+	runtime.LogDebug(ctx, "Wails UI booted. Engine standing by")
+	a.InitNetwork()
 }
 
 func (a *App) beforeClose(ctx context.Context) (prevent bool) {
@@ -45,11 +39,24 @@ func (a *App) beforeClose(ctx context.Context) (prevent bool) {
 }
 
 func (a *App) shutdown(ctx context.Context) {
-	log.Println("Shutdown signal received from GUI. Tearing down TAP interface...")
+	runtime.LogDebug(ctx, "Shutdown signal received from GUI. Tearing down TAP interface...")
 
 	a.facade.Stop()
 }
 
 func (a *App) Greet(name string) string {
 	return fmt.Sprintf("Hello %s, It's show time!", name)
+}
+
+func (a *App) InitNetwork() {
+	runtime.LogDebug(a.ctx, "Initializing TAP interface")
+	a.facade.Start(a.ctx)
+	x, y := utils.SteamIDToTapCoords(a.facade.GetLocalSteamID())
+
+	runtime.LogDebugf(a.ctx, "Initializing tap interface IP: 10.209.%d,%d", x, y)
+}
+
+func (a *App) JoinLobby(steamID uint64) error {
+	runtime.LogDebugf(a.ctx, "Attempting to join Steam ID %d(0 means hosting)", steamID)
+	return nil
 }

@@ -191,3 +191,7 @@ func (c *Client) SendControlMessage(steamID uint64, action uint8, ip uint32) {
 func (c *Client) Close() {
 	bridgeShutdown()
 }
+
+func (c *Client) GetLocalSteamID() uint64 {
+	return bridgeGetLocalSteamID()
+}

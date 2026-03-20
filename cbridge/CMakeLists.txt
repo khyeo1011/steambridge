@@ -8,9 +8,13 @@ add_library(steam_bridge SHARED
     ${CMAKE_CURRENT_SOURCE_DIR}/steam_bridge.cpp
 )
 
+set_target_properties(steam_bridge PROPERTIES
+    OUTPUT_NAME "steam_bridge"
+    PREFIX "lib")
+
 target_include_directories(steam_bridge 
     PRIVATE 
-    "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/public"
+    "${CMAKE_CURRENT_SOURCE_DIR}/sdk/public"
 )
 
 if (WIN32)
