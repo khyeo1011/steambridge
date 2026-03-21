@@ -19,13 +19,13 @@ jobs:
         build:
         - name: 'App'
           platform: 'linux/amd64'
-          os: 'Linux'
+          os: 'ubuntu-latest'
         # - name: 'App'
         #   platform: 'darwin/amd64'
         #   os: 'macOS'
         - name: 'App'
           platform: 'windows/amd64'
-          os: 'Windows'
+          os: 'windows-latest'
 
     runs-on: ${{ matrix.build.os }}
 
