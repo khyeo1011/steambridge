@@ -22,7 +22,7 @@ jobs:
           os: 'ubuntu-latest'
         # - name: 'App'
         #   platform: 'darwin/amd64'
-        #   os: 'macOS'
+        #   os: 'macos-latest'
         - name: 'App'
           platform: 'windows/amd64'
           os: 'windows-latest'
@@ -93,7 +93,7 @@ jobs:
 
 
     - name: Upload Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: steambridge-build-${{ matrix.build.os }}
         path: |
