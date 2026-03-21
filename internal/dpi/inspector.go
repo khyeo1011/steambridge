@@ -38,12 +38,6 @@ func IsValidLan(packet []byte) bool {
 	if len(packet) < 1 {
 		return false
 	}
-
-	// Check if it's an ARP payload (Hardware Type: Ethernet 0x0001, Protocol: IPv4 0x0800)
-	if len(packet) >= 4 && packet[0] == 0x00 && packet[1] == 0x01 && packet[2] == 0x08 && packet[3] == 0x00 {
-		return true
-	}
-
 	version := packet[0] >> 4
 
 	if version == 4 {
@@ -70,11 +64,6 @@ func IsValidLan(packet []byte) bool {
 func IsAllowedPort(packet []byte, allowedPorts *sync.Map) bool {
 	if len(packet) < 1 {
 		return false
-	}
-
-	// Allow ARP payloads
-	if len(packet) >= 4 && packet[0] == 0x00 && packet[1] == 0x01 && packet[2] == 0x08 && packet[3] == 0x00 {
-		return true
 	}
 
 	version := packet[0] >> 4

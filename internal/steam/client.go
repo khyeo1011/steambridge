@@ -13,14 +13,25 @@ import (
 	"time"
 )
 
+type RouterInterface interface {
+	HandleIngress(senderID uint64, packet []byte)
+	SetSteamSender(s router.SteamSender)
+	StartEgress(ctx context.Context)
+	AddPort(port uint16)
+	RemovePort(port uint16)
+	SetFirewall(enabled bool)
+	SetIP(ip uint32) error
+	GetDevName() string
+}
+
 type Client struct {
-	router    *router.Router
+	router    RouterInterface
 	peermutex sync.RWMutex
 	steamIDs  map[uint64]bool
 	ipPool    *ipam.Pool
 }
 
-func NewClient(router *router.Router) *Client {
+func NewClient(router RouterInterface) *Client {
 	err := LoadLibrary()
 	if err != nil {
 		panic(err)
@@ -129,14 +140,14 @@ func (c *Client) ReadLoop(ctx context.Context) {
 					c.SendControlMessage(remoteSteamID, protocol.ActionOfferIP, assignedIP)
 					log.Printf("Assigned IP %s to %v", utils.IntIPtoString(assignedIP), remoteSteamID)
 				case protocol.ActionOfferIP:
-					err := setTAPIP(msg.IP, c.router.GetTap())
+					err := c.router.SetIP(msg.IP)
 					if err != nil {
 						c.SendControlMessage(remoteSteamID, protocol.ActionNackIP, 0)
 						continue
 					}
 					assigned := false
 					for i := 0; i < 3; i++ {
-						iface, err := net.InterfaceByName(c.router.GetTap().Name())
+						iface, err := net.InterfaceByName(c.router.GetDevName())
 						addrs, err := iface.Addrs()
 						if err != nil {
 							log.Printf("Error getting addresses")

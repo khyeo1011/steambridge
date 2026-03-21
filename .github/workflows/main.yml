@@ -74,7 +74,22 @@ jobs:
         cd cbridge
         call build.bat
 
-    - name: Run Go Tests
+    - name: Download Wintun (Windows Only)
+      if: runner.os == 'windows-latest'
+      run: |
+        Invoke-WebRequest -Uri https://www.wintun.net/builds/wintun-0.14.1.zip -OutFile wintun.zip
+        Expand-Archive wintun.zip -DestinationPath wintun
+        # Copy the 64-bit wintun.dll to the tun package directory so the tests can find it
+        Copy-Item wintun/wintun/bin/amd64/wintun.dll ./tun/
+        Copy-Item wintun/wintun/bin/amd64/wintun.dll ./
+
+    - name: Run Go Tests (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo go test -v ./internal/...
+
+    - name: Run Go Tests (Windows)
+      if: runner.os == 'Windows'
       run: |
         go test -v ./internal/...
 

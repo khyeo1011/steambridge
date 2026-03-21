@@ -49,7 +49,7 @@ func (f *Facade) Start(ctx context.Context) error {
 	}
 	f.tunDev = tunDev
 
-	f.router = router.NewRouter(f.tunDev, nil, f.table)
+	f.router = router.NewRouter(f.tunDev, nil)
 
 	log.Println("Initializing Steamworks API...")
 	f.client = steam.NewClient(f.router)

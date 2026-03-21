@@ -16,16 +16,16 @@ type SteamSender interface {
 }
 
 type Router struct {
-	tunDev          *tun.Device
+	tunDev          tun.TunInterface
 	steam           SteamSender
 	table           Table
 	allowedPorts    sync.Map
 	firewallEnabled atomic.Bool
 }
 
-func NewRouter(tap *tun.Device, steam SteamSender) *Router {
+func NewRouter(tun tun.TunInterface, steam SteamSender) *Router {
 	return &Router{
-		tunDev:          tap,
+		tunDev:          tun,
 		steam:           steam,
 		table:           *NewTable(),
 		allowedPorts:    sync.Map{},
@@ -65,33 +65,30 @@ func (r *Router) HandleIngress(senderID uint64, packet []byte) {
 }
 
 func (r *Router) StartEgress(ctx context.Context) {
-	frame := make([]byte, 2048)
+	packet := make([]byte, 2048)
 
 	for {
-		n, err := r.tunDev.Read(frame[1:])
+		n, err := r.tunDev.Read(packet[1:])
 		if err != nil {
 			return
 		}
-		if n < 14 {
+		if !dpi.IsValidLan(packet[1:]) {
 			continue
 		}
-		if !dpi.IsValidLan(frame[1:]) {
+		if r.firewallEnabled.Load() && !dpi.IsAllowedPort(packet[1:], &r.allowedPorts) {
 			continue
 		}
-		if r.firewallEnabled.Load() && !dpi.IsAllowedPort(frame[1:], &r.allowedPorts) {
-			continue
-		}
-		frame[0] = protocol.PacketTypeData
+		packet[0] = protocol.PacketTypeData
 		// Isolate the actual read bytes
-		payload := frame[:n+1]
+		payload := packet[:n+1]
 
-		var destMAC [6]byte
-		copy(destMAC[:], payload[1:7])
+		var destIP uint32
+		destIP = binary.BigEndian.Uint32(payload[13:17])
 
-		if destMAC == [6]byte{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF} {
+		if destIP == 0xFFFFFFFF {
 			r.steam.SendToAll(payload)
 		} else {
-			steamID, ok := r.table.Lookup(destMAC)
+			steamID, ok := r.table.Lookup(destIP)
 			if ok {
 				r.steam.SendToPeer(steamID, payload)
 			} else {
@@ -107,10 +104,6 @@ func (r *Router) SetSteamSender(s SteamSender) {
 	r.steam = s
 }
 
-func (r *Router) GetTap() *tun.Device {
-	return r.tunDev
-}
-
 func (r *Router) AddPort(port uint16) {
 	r.allowedPorts.Store(port, true)
 }
@@ -121,4 +114,12 @@ func (r *Router) RemovePort(port uint16) {
 
 func (r *Router) SetFirewall(enabled bool) {
 	r.firewallEnabled.Store(enabled)
+}
+
+func (r *Router) SetIP(ip uint32) error {
+	return r.tunDev.SetIP(ip)
+}
+
+func (r *Router) GetDevName() string {
+	return r.tunDev.Name()
 }

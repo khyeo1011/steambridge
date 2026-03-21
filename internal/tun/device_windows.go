@@ -89,7 +89,7 @@ func (d *Device) Name() string {
 	return d.name
 }
 
-func (d *Device) setIP(ip uint32) error {
+func (d *Device) SetIP(ip uint32) error {
 	cmd := exec.Command("netsh", "interface", "ip", "set", "address",
 		fmt.Sprintf("name=%s", d.Name()), "static", utils.IntIPtoString(ip), "255.255.255.0")
 	return cmd.Run()

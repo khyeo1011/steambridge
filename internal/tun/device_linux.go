@@ -19,11 +19,11 @@ type Device struct {
 func getWaterConfig(ifaceName string) water.Config {
 	if ifaceName == "" {
 		return water.Config{
-			DeviceType: water.TAP,
+			DeviceType: water.TUN,
 		}
 	}
 	return water.Config{
-		DeviceType: water.TAP,
+		DeviceType: water.TUN,
 		PlatformSpecificParams: water.PlatformSpecificParams{
 			Name: ifaceName,
 		},
@@ -70,7 +70,7 @@ func (d *Device) Close() error {
 	return d.Interface.Close()
 }
 
-func (d *Device) setIP(ip uint32) error {
+func (d *Device) SetIP(ip uint32) error {
 	ipCmd := exec.Command("sudo", "ip", "addr", "add", fmt.Sprintf("%s/24", utils.IntIPtoString(ip)), "dev", d.Name())
 	if err := ipCmd.Run(); err != nil {
 		log.Printf("Failed to set ip address to %s", utils.IntIPtoString(ip))
@@ -82,4 +82,8 @@ func (d *Device) setIP(ip uint32) error {
 		return err
 	}
 	return nil
+}
+
+func (d *Device) Name() string {
+	return d.Interface.Name()
 }
