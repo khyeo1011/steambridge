@@ -1,17 +1,33 @@
 name: SteamBridge CI
 
+
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
 
+env: 
+  NODE_OPTIONS: '--max-old-space-size=4096'
+
+
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+        build:
+        - name: 'App'
+          platform: 'linux/amd64'
+          os: 'ubuntu-latest'
+        # - name: 'App'
+        #   platform: 'darwin/amd64'
+        #   os: 'macos-latest'
+        - name: 'App'
+          platform: 'windows/amd64'
+          os: 'windows-latest'
+
+    runs-on: ${{ matrix.build.os }}
 
     steps:
     - name: Checkout Code
@@ -23,6 +39,7 @@ jobs:
       env:
         SDK_PASS: ${{ secrets.SDK_PASSPHRASE }}
       run: |
+        cd cbridge
         echo "Decrypting SDK vault..."
         gpg --quiet --batch --yes --decrypt --passphrase="$SDK_PASS" --output sdk.zip steamworks_sdk.zip.gpg
         
@@ -35,6 +52,10 @@ jobs:
       uses: actions/setup-go@v5
       with:
         go-version: '1.23.6'
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+
 
     - name: Setup CMake
       uses: jwlawson/actions-setup-cmake@v2
@@ -55,16 +76,33 @@ jobs:
 
     - name: Run Go Tests
       run: |
-        go test -v ./...
+        go test -v ./internal/...
 
     - name: Build Go Router
       run: |
         go build ./cmd/steambridge
+    
+    - name: Install Wails System Dependencies (Linux)
+      if: runner.os == 'Linux'
+      # Wails requires these C bindings to compile the webview on Linux
+      run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev build-essential
+
+    - name: Install Wails CLI
+      run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
+    - name: Build Wails App (Linux)
+      if: runner.os == 'Linux'
+      run: wails build -platform ${{ matrix.build.platform }} -tags webkit2_41
+
+    - name: Build Wails App (Windows)
+      if: runner.os == 'Windows'
+      run: wails build -platform ${{ matrix.build.platform }}
+
 
     - name: Upload Artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
-        name: steambridge-build-${{ matrix.os }}
+        name: steambridge-build-${{ matrix.build.os }}
         path: |
           steambridge*
           *.dll

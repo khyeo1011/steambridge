@@ -29,42 +29,37 @@ type Facade struct {
 	bootstrapPeerID uint64
 }
 
-func NewFacade(config Config) (*Facade, error) {
+func NewFacade(config Config) *Facade {
 	table := switchboard.NewTable()
-
-	log.Printf("Setting up TAP interface: %s\n", config.IfaceName)
-	tapDev, err := tap.NewDevice(config.IfaceName, config.IfaceID)
-	if err != nil {
-		return nil, fmt.Errorf("could not create TAP device: %w", err)
-	}
-
-	router := switchboard.NewRouter(tapDev, nil, table)
-
-	log.Println("Initializing Steamworks API...")
-	client := steam.NewClient(router)
-
-	if config.BootstrapPeerID != 0 {
-		client.AddPeer(config.BootstrapPeerID)
-	}
-
-	router.SetSteamSender(client)
-
-	log.Printf("SteamBridge is live on interface '%s'! Press Ctrl+C to exit.\n", config.IfaceName)
 
 	return &Facade{
 		ifaceName:       config.IfaceName,
 		ifaceID:         config.IfaceID,
-		tapDev:          tapDev,
-		router:          router,
-		client:          client,
 		table:           table,
-		wg:              sync.WaitGroup{},
-		cancelFunc:      nil,
 		bootstrapPeerID: config.BootstrapPeerID,
-	}, nil
+		wg:              sync.WaitGroup{},
+	}
 }
 
 func (f *Facade) Start(ctx context.Context) error {
+	log.Printf("Setting up TAP interface: %s\n", f.ifaceName)
+	tapDev, err := tap.NewDevice(f.ifaceName, f.ifaceID)
+	if err != nil {
+		return fmt.Errorf("could not create TAP device: %w", err)
+	}
+	f.tapDev = tapDev
+
+	f.router = switchboard.NewRouter(f.tapDev, nil, f.table)
+
+	log.Println("Initializing Steamworks API...")
+	f.client = steam.NewClient(f.router)
+
+	if f.bootstrapPeerID != 0 {
+		f.client.AddPeer(f.bootstrapPeerID)
+	}
+
+	f.router.SetSteamSender(f.client)
+	log.Printf("SteamBridge is live on interface '%s'! Waiting for GUI shutdown.\n", f.ifaceName)
 	engineCtx, cancel := context.WithCancel(ctx)
 	f.cancelFunc = cancel
 	f.wg.Add(2)
@@ -117,4 +112,8 @@ func (f *Facade) RemovePort(port uint16) {
 
 func (f *Facade) SetFirewall(enabled bool) {
 	f.router.SetFirewall(enabled)
+}
+
+func (f *Facade) GetLocalSteamID() uint64 {
+	return f.client.GetLocalSteamID()
 }

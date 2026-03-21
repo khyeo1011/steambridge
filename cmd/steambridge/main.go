@@ -26,10 +26,7 @@ func main() {
 		BootstrapPeerID: *peerID,
 	}
 
-	facade, err := facade.NewFacade(config)
-	if err != nil {
-		log.Fatalf("Error creating facade: %s", err)
-	}
+	facade := facade.NewFacade(config)
 	facade.SetFirewall(*enableFirewall)
 	facade.AddPort(80)
 	facade.AddPort(443)
