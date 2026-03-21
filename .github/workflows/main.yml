@@ -83,7 +83,7 @@ jobs:
         go build ./cmd/steambridge
     
     - name: Build Wails
-      uses: dAppServer/wails-build-action@v2.2
+      uses: snider/build@v3
       id: build
       with: 
           build-name: ${{ matrix.build.name }}
