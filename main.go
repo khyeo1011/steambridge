@@ -70,7 +70,7 @@ func main() {
 			WebviewIsTransparent: true,
 			WindowIsTranslucent:  true,
 			About: &mac.AboutInfo{
-				Title:   "temp",
+				Title:   "Steambridge",
 				Message: "",
 				Icon:    icon,
 			},

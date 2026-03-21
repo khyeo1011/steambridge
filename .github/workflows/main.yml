@@ -1,5 +1,8 @@
 name: SteamBridge CI
 
+env: 
+  NODE_OPTIONS: '--max-old-space-size=4096'
+
 on:
   push:
     branches: [ "main" ]
@@ -9,9 +12,20 @@ on:
 jobs:
   build:
     strategy:
+      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+        build:
+        - name: 'App'
+          platform: 'linux/amd64'
+          os: 'Linux'
+        # - name: 'App'
+        #   platform: 'darwin/amd64'
+        #   os: 'macOS'
+        - name: 'App'
+          platform: 'windows/amd64'
+          os: 'Windows'
+
+    runs-on: ${{ matrix.build.os }}
 
     steps:
     - name: Checkout Code
@@ -36,6 +50,10 @@ jobs:
       uses: actions/setup-go@v5
       with:
         go-version: '1.23.6'
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+
 
     - name: Setup CMake
       uses: jwlawson/actions-setup-cmake@v2
@@ -63,12 +81,19 @@ jobs:
         go build ./cmd/steambridge
     
     - name: Build Wails
-        wails build
+      uses: dAppServer/wails-build-action@v2.2
+      id: build
+      with: 
+          build-name: ${{ matrix.build.name }}
+          build-platform: ${{ matrix.build.platform }}
+          package: false
+          go-version: '1.23.6'
+
 
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: steambridge-build-${{ matrix.os }}
+        name: steambridge-build-${{ matrix.build.os }}
         path: |
           steambridge*
           *.dll
