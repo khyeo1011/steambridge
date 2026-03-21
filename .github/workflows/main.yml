@@ -1,13 +1,15 @@
 name: SteamBridge CI
 
-env: 
-  NODE_OPTIONS: '--max-old-space-size=4096'
 
 on:
   push:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+
+env: 
+  NODE_OPTIONS: '--max-old-space-size=4096'
+
 
 jobs:
   build:
