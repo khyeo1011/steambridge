@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log"
 	"steambridge/internal/protocol"
+	"steambridge/internal/router"
 	"steambridge/internal/steam"
-	"steambridge/internal/switchboard"
-	"steambridge/internal/tap"
+	"steambridge/internal/tun"
 	"sync"
 )
 
@@ -20,17 +20,17 @@ type Config struct {
 type Facade struct {
 	ifaceName       string
 	ifaceID         string
-	tapDev          *tap.Device
-	router          *switchboard.Router
+	tunDev          tun.TunInterface
+	router          *router.Router
 	client          *steam.Client
-	table           *switchboard.Table
+	table           *router.Table
 	wg              sync.WaitGroup
 	cancelFunc      context.CancelFunc
 	bootstrapPeerID uint64
 }
 
 func NewFacade(config Config) *Facade {
-	table := switchboard.NewTable()
+	table := router.NewTable()
 
 	return &Facade{
 		ifaceName:       config.IfaceName,
@@ -43,13 +43,13 @@ func NewFacade(config Config) *Facade {
 
 func (f *Facade) Start(ctx context.Context) error {
 	log.Printf("Setting up TAP interface: %s\n", f.ifaceName)
-	tapDev, err := tap.NewDevice(f.ifaceName, f.ifaceID)
+	tunDev, err := tun.NewTUN(f.ifaceName, f.ifaceID)
 	if err != nil {
 		return fmt.Errorf("could not create TAP device: %w", err)
 	}
-	f.tapDev = tapDev
+	f.tunDev = tunDev
 
-	f.router = switchboard.NewRouter(f.tapDev, nil, f.table)
+	f.router = router.NewRouter(f.tunDev, nil, f.table)
 
 	log.Println("Initializing Steamworks API...")
 	f.client = steam.NewClient(f.router)
@@ -89,8 +89,8 @@ func (f *Facade) Stop() error {
 		f.cancelFunc()
 	}
 
-	if f.tapDev != nil {
-		f.tapDev.Close()
+	if f.tunDev != nil {
+		f.tunDev.Close()
 	}
 
 	if f.client != nil {

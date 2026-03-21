@@ -1,10 +1,11 @@
-package switchboard
+package router
 
 import (
 	"context"
+	"encoding/binary"
 	"steambridge/internal/dpi"
 	"steambridge/internal/protocol"
-	"steambridge/internal/tap"
+	"steambridge/internal/tun"
 	"sync"
 	"sync/atomic"
 )
@@ -15,46 +16,59 @@ type SteamSender interface {
 }
 
 type Router struct {
-	tap             *tap.Device
+	tunDev          *tun.Device
 	steam           SteamSender
-	table           *Table
+	table           Table
 	allowedPorts    sync.Map
 	firewallEnabled atomic.Bool
 }
 
-func NewRouter(tap *tap.Device, steam SteamSender, table *Table) *Router {
+func NewRouter(tap *tun.Device, steam SteamSender) *Router {
 	return &Router{
-		tap:             tap,
+		tunDev:          tap,
 		steam:           steam,
-		table:           table,
+		table:           *NewTable(),
 		allowedPorts:    sync.Map{},
 		firewallEnabled: atomic.Bool{},
 	}
 }
 
-func (r *Router) HandleIngress(senderID uint64, frame []byte) {
-	if len(frame) < 14 {
+func (r *Router) HandleIngress(senderID uint64, packet []byte) {
+	offset := 0
+
+	// - Raw IPv4 starts with 0x45 (Version 4, IHL 5)
+	// - PI/AF headers usually start with 0x00
+	if len(packet) > 4 && (packet[0] == 0x00 || packet[0] == 0x02) {
+		offset = 4
+	}
+
+	if len(packet) < 20+offset {
 		return
 	}
-	if r.firewallEnabled.Load() && !dpi.IsAllowedPort(frame, &r.allowedPorts) {
+
+	if !dpi.IsValidLan(packet[offset:]) {
 		return
 	}
-	if len(frame) < 60 {
+
+	if r.firewallEnabled.Load() && !dpi.IsAllowedPort(packet[offset:], &r.allowedPorts) {
+		return
+	}
+	if len(packet) < 60 {
 		padded := make([]byte, 60)
-		copy(padded, frame)
-		frame = padded
+		copy(padded, packet)
+		packet = padded
 	}
-	var sourceMAC [6]byte
-	copy(sourceMAC[:], frame[6:12])
-	r.table.Update(sourceMAC, senderID)
-	r.tap.Write(frame)
+	var ip uint32
+	ip = binary.BigEndian.Uint32(packet[offset+12 : offset+16])
+	r.table.Update(ip, senderID)
+	r.tunDev.Write(packet)
 }
 
 func (r *Router) StartEgress(ctx context.Context) {
 	frame := make([]byte, 2048)
 
 	for {
-		n, err := r.tap.Read(frame[1:])
+		n, err := r.tunDev.Read(frame[1:])
 		if err != nil {
 			return
 		}
@@ -93,8 +107,8 @@ func (r *Router) SetSteamSender(s SteamSender) {
 	r.steam = s
 }
 
-func (r *Router) GetTap() *tap.Device {
-	return r.tap
+func (r *Router) GetTap() *tun.Device {
+	return r.tunDev
 }
 
 func (r *Router) AddPort(port uint16) {

@@ -7,19 +7,20 @@ import (
 	"net"
 	"steambridge/internal/ipam"
 	"steambridge/internal/protocol"
-	"steambridge/internal/switchboard"
+	"steambridge/internal/router"
+	"steambridge/internal/utils"
 	"sync"
 	"time"
 )
 
 type Client struct {
-	router    *switchboard.Router
+	router    *router.Router
 	peermutex sync.RWMutex
 	steamIDs  map[uint64]bool
 	ipPool    *ipam.Pool
 }
 
-func NewClient(router *switchboard.Router) *Client {
+func NewClient(router *router.Router) *Client {
 	err := LoadLibrary()
 	if err != nil {
 		panic(err)
@@ -126,7 +127,7 @@ func (c *Client) ReadLoop(ctx context.Context) {
 				case protocol.ActionRequestIP:
 					assignedIP := c.ipPool.Allocate(remoteSteamID)
 					c.SendControlMessage(remoteSteamID, protocol.ActionOfferIP, assignedIP)
-					log.Printf("Assigned IP %s to %v", ipam.IntIPtoString(assignedIP), remoteSteamID)
+					log.Printf("Assigned IP %s to %v", utils.IntIPtoString(assignedIP), remoteSteamID)
 				case protocol.ActionOfferIP:
 					err := setTAPIP(msg.IP, c.router.GetTap())
 					if err != nil {
@@ -143,8 +144,8 @@ func (c *Client) ReadLoop(ctx context.Context) {
 						}
 						for _, addr := range addrs {
 							if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-								if ipnet.IP.String() == ipam.IntIPtoString(msg.IP) {
-									log.Printf("Received IP %s from %v", ipam.IntIPtoString(msg.IP), remoteSteamID)
+								if ipnet.IP.String() == utils.IntIPtoString(msg.IP) {
+									log.Printf("Received IP %s from %v", utils.IntIPtoString(msg.IP), remoteSteamID)
 									c.SendControlMessage(remoteSteamID, protocol.ActionAckIP, msg.IP)
 									assigned = true
 									break
@@ -160,11 +161,11 @@ func (c *Client) ReadLoop(ctx context.Context) {
 						c.SendControlMessage(remoteSteamID, protocol.ActionNackIP, msg.IP)
 					}
 				case protocol.ActionAckIP:
-					log.Printf("Received ACK for IP %s from %v", ipam.IntIPtoString(msg.IP), remoteSteamID)
+					log.Printf("Received ACK for IP %s from %v", utils.IntIPtoString(msg.IP), remoteSteamID)
 				case protocol.ActionNackIP:
 					if msg.IP != 0 {
 						c.ipPool.Release(msg.IP)
-						log.Printf("Releasing IP %s", ipam.IntIPtoString(msg.IP))
+						log.Printf("Releasing IP %s", utils.IntIPtoString(msg.IP))
 					} else {
 						log.Printf("Peceived 0 as nack op")
 					}

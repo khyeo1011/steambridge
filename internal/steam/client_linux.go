@@ -6,14 +6,14 @@ import (
 	"fmt"
 	"log"
 	"os/exec"
-	"steambridge/internal/ipam"
-	"steambridge/internal/tap"
+	"steambridge/internal/tun"
+	"steambridge/internal/utils"
 )
 
-func setTAPIP(ip uint32, device *tap.Device) error {
-	ipCmd := exec.Command("sudo", "ip", "addr", "add", fmt.Sprintf("%s/24", ipam.IntIPtoString(ip)), "dev", device.Name())
+func setTAPIP(ip uint32, device *tun.Device) error {
+	ipCmd := exec.Command("sudo", "ip", "addr", "add", fmt.Sprintf("%s/24", utils.IntIPtoString(ip)), "dev", device.Name())
 	if err := ipCmd.Run(); err != nil {
-		log.Printf("Failed to set ip address to %s", ipam.IntIPtoString(ip))
+		log.Printf("Failed to set ip address to %s", utils.IntIPtoString(ip))
 		return err
 	}
 	upCmd := exec.Command("sudo", "ip", "link", "set", "dev", device.Name(), "up")

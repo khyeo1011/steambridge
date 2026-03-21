@@ -1,7 +1,6 @@
 package ipam
 
 import (
-	"fmt"
 	"sync"
 )
 
@@ -33,10 +32,6 @@ func (p *Pool) Allocate(steamID uint64) uint32 {
 	p.leases[steamID] = ip
 	p.hostCounter++
 	return ip
-}
-
-func IntIPtoString(ip uint32) string {
-	return fmt.Sprintf("%d.%d.%d.%d", ip>>24, (ip>>16)&0xFF, (ip>>8)&0xFF, ip&0xFF)
 }
 
 func (p *Pool) Release(ip uint32) {
