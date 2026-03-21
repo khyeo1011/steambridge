@@ -34,7 +34,7 @@ if (WIN32)
     )
 else()
     target_link_directories(steam_bridge PRIVATE 
-        "${CMAKE_CURRENT_SOURCE_DIR}/../sdk/redistributable_bin/linux64"
+        "${CMAKE_CURRENT_SOURCE_DIR}/sdk/redistributable_bin/linux64"
     )
     target_link_libraries(steam_bridge PRIVATE steam_api)
     

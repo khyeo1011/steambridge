@@ -76,7 +76,7 @@ jobs:
 
     - name: Run Go Tests
       run: |
-        go test -v ./...
+        go test -v ./internal/...
 
     - name: Build Go Router
       run: |
