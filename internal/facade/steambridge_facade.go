@@ -27,6 +27,7 @@ type Facade struct {
 	wg              sync.WaitGroup
 	cancelFunc      context.CancelFunc
 	bootstrapPeerID uint64
+	readyChan       chan struct{}
 }
 
 func NewFacade(config Config) *Facade {
@@ -59,7 +60,7 @@ func (f *Facade) Start(ctx context.Context) error {
 	}
 
 	f.router.SetSteamSender(f.client)
-	log.Printf("SteamBridge is live on interface '%s'! Waiting for GUI shutdown.\n", f.ifaceName)
+	log.Printf("SteamBridge is live on interface '%s'! Waiting for shutdown.\n", f.ifaceName)
 	engineCtx, cancel := context.WithCancel(ctx)
 	f.cancelFunc = cancel
 	f.wg.Add(2)
