@@ -89,10 +89,4 @@ SteamBridge is a high-performance, custom Layer 3 virtual tunneling application 
 
 ## ⚠️ Known Issues
 
-| Issue | Severity | Details |
-|-------|----------|---------|
-| Panic on Steam SDK load | HIGH | `NewClient()` panics if `LoadLibrary()` or `Bridge_Init()` fails — should return error |
-| IP offset fragility | HIGH | Egress offset `payload[13:17]` is hardcoded to TUN framing; breaks if driver layout changes |
-| IPAM deadlock risk | MEDIUM | `Pool.Allocate()` holds mutex during blocking P2P send |
-| Linux requires sudo | MEDIUM | `device_linux.go:74` uses `sudo ip addr add` — requires passwordless sudoers entry |
-| IPv6 silently dropped | MEDIUM | DPI and Router both reject IPv6; no documentation of this invariant |
+
