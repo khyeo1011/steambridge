@@ -3,7 +3,7 @@
 > [!IMPORTANT]
 > **Current Status:** The project is in progress. See the [Roadmap](#-roadmap) for what's done and what's next.
 
-SteamBridge is a high-performance, custom Layer 2/Layer 4 virtual tunneling application written in Go. It routes raw Ethernet frames over the Steam P2P network (via the Steamworks SDK), effectively turning the Steam backbone into a zero-configuration, secure Virtual Private LAN for gaming.
+SteamBridge is a high-performance, custom Layer 3 virtual tunneling application written in Go. It routes raw IP frames over the Steam P2P network (via the Steamworks SDK), effectively turning the Steam backbone into a zero-configuration, secure Virtual Private LAN for gaming.
 
 ---
 
@@ -72,14 +72,7 @@ SteamBridge is a high-performance, custom Layer 2/Layer 4 virtual tunneling appl
 
 ## 🗺️ Roadmap
 
-### Phase 1: Stabilize Core (In Progress)
-- [X] TUN device configuration (Windows + Linux)
-- [X] Direct P2P send and broadcast support
-- [X] Dynamic IP address management
-- [X] Refactor: interface-based TUN abstraction, stateless DPI, clean Router
-- [ ] **Fix panic on Steam SDK load failure** — return error instead of `panic()`
-- [ ] **Fix IP offset invariant** — document/verify framing between ingress and egress paths
-- [ ] **Fix IPAM lock scope** — release mutex before blocking P2P send
+### Phase 1: Stabilize Core (Done)
 
 ### Phase 2: Feature Completion
 - [ ] **GUI Dashboard** — real-time peer list, IP assignments, firewall controls
