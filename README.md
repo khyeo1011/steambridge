@@ -1,9 +1,9 @@
 # SteamBridge
 
 > [!IMPORTANT]
-> **Current Status:** The project is on the `reflect` branch with an active refactor in progress. See the [Roadmap](#-roadmap) for what's done and what's next.
+> **Current Status:** The project is in progress. See the [Roadmap](#-roadmap) for what's done and what's next.
 
-SteamBridge is a high-performance, custom Layer 2/Layer 4 virtual tunneling application written in Go. It routes raw Ethernet frames over the Steam P2P network (via the Steamworks SDK), effectively turning the Steam backbone into a zero-configuration, secure Virtual Private LAN for gaming.
+SteamBridge is a high-performance, custom Layer 3 virtual tunneling application written in Go. It routes raw IP frames over the Steam P2P network (via the Steamworks SDK), effectively turning the Steam backbone into a zero-configuration, secure Virtual Private LAN for gaming.
 
 ---
 
@@ -72,14 +72,7 @@ SteamBridge is a high-performance, custom Layer 2/Layer 4 virtual tunneling appl
 
 ## 🗺️ Roadmap
 
-### Phase 1: Stabilize Core (In Progress)
-- [X] TUN device configuration (Windows + Linux)
-- [X] Direct P2P send and broadcast support
-- [X] Dynamic IP address management
-- [X] Refactor: interface-based TUN abstraction, stateless DPI, clean Router
-- [ ] **Fix panic on Steam SDK load failure** — return error instead of `panic()`
-- [ ] **Fix IP offset invariant** — document/verify framing between ingress and egress paths
-- [ ] **Fix IPAM lock scope** — release mutex before blocking P2P send
+### Phase 1: Stabilize Core (Done)
 
 ### Phase 2: Feature Completion
 - [ ] **GUI Dashboard** — real-time peer list, IP assignments, firewall controls
@@ -96,10 +89,4 @@ SteamBridge is a high-performance, custom Layer 2/Layer 4 virtual tunneling appl
 
 ## ⚠️ Known Issues
 
-| Issue | Severity | Details |
-|-------|----------|---------|
-| Panic on Steam SDK load | HIGH | `NewClient()` panics if `LoadLibrary()` or `Bridge_Init()` fails — should return error |
-| IP offset fragility | HIGH | Egress offset `payload[13:17]` is hardcoded to TUN framing; breaks if driver layout changes |
-| IPAM deadlock risk | MEDIUM | `Pool.Allocate()` holds mutex during blocking P2P send |
-| Linux requires sudo | MEDIUM | `device_linux.go:74` uses `sudo ip addr add` — requires passwordless sudoers entry |
-| IPv6 silently dropped | MEDIUM | DPI and Router both reject IPv6; no documentation of this invariant |
+
