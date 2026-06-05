@@ -45,8 +45,3 @@ func (p *Pool) Release(ip uint32) {
 	}
 }
 
-func (p *Pool) RealeaseSteamID(steamID uint64) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	delete(p.leases, steamID)
-}

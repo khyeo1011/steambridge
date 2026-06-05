@@ -17,34 +17,40 @@ func TestIsReliable(t *testing.T) {
 		},
 		{
 			name: "IPv4 UDP",
-			// 14 byte Eth Header (0x0800 at offset 12) + IP Header (Protocol 17 at offset 23)
+			// Raw IPv4 packet (TUN device — no Ethernet header). Protocol at offset 9.
 			frame: []byte{
-				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 12 bytes MACs
-				0x08, 0x00, // EtherType IPv4
-				0, 0, 0, 0, 0, 0, 0, 0, 0, // 9 bytes IP header start
-				17, // Protocol UDP (Offset 23)
+				0x45,       // version=4, IHL=5
+				0x00,       // DSCP+ECN
+				0x00, 0x1c, // total length
+				0x00, 0x00, // identification
+				0x00, 0x00, // flags + fragment offset
+				0x40,       // TTL
+				17,         // protocol = UDP
 			},
 			expected: false,
 		},
 		{
 			name: "IPv4 TCP",
+			// Raw IPv4 packet. Protocol at offset 9.
 			frame: []byte{
-				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-				0x08, 0x00,
-				0, 0, 0, 0, 0, 0, 0, 0, 0,
-				6, // Protocol TCP
+				0x45,
+				0x00,
+				0x00, 0x28,
+				0x00, 0x00,
+				0x00, 0x00,
+				0x40,
+				6, // protocol = TCP
 			},
 			expected: true,
 		},
 		{
 			name: "IPv6 UDP",
-			// 14 byte Eth Header (0x86DD at offset 12) + IP Header (Next Header 17 at offset 20)
+			// Raw IPv6 packet (TUN device — no Ethernet header). Next Header at offset 6.
 			frame: []byte{
-				0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-				0x86, 0xDD, // EtherType IPv6
-				0, 0, 0, 0, 0, 0, // 6 bytes IP header start
-				17, // Next Header UDP (Offset 20)
-				0,  // Padding for length check
+				0x60,       // version=6, TC=0, flow=0
+				0x00, 0x00, 0x00, // TC + flow label
+				0x00, 0x08, // payload length
+				17,         // next header = UDP
 			},
 			expected: false,
 		},

@@ -82,8 +82,14 @@ func (r *Router) StartEgress(ctx context.Context) {
 		// Isolate the actual read bytes
 		payload := packet[:n+1]
 
+		// payload[0] = PacketTypeData tag, payload[1:] = raw IPv4 packet.
+		// IPv4 destination address is at header offset 16 (bytes 16–19).
+		const tagLen = 1
+		if len(payload) < tagLen+20 {
+			continue
+		}
 		var destIP uint32
-		destIP = binary.BigEndian.Uint32(payload[13:17])
+		destIP = binary.BigEndian.Uint32(payload[tagLen+16 : tagLen+20])
 
 		if destIP == 0xFFFFFFFF {
 			r.steam.SendToAll(payload)

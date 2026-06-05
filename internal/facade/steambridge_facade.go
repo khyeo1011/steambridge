@@ -53,7 +53,12 @@ func (f *Facade) Start(ctx context.Context) error {
 	f.router = router.NewRouter(f.tunDev, nil)
 
 	log.Println("Initializing Steamworks API...")
-	f.client = steam.NewClient(f.router)
+	client, err := steam.NewClient(f.router)
+	if err != nil {
+		f.tunDev.Close()
+		return fmt.Errorf("steam client init: %w", err)
+	}
+	f.client = client
 
 	if f.bootstrapPeerID != 0 {
 		f.client.AddPeer(f.bootstrapPeerID)

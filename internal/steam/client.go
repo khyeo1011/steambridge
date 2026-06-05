@@ -3,6 +3,8 @@ package steam
 import (
 	"context"
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"log"
 	"net"
 	"steambridge/internal/ipam"
@@ -31,21 +33,18 @@ type Client struct {
 	ipPool    *ipam.Pool
 }
 
-func NewClient(router RouterInterface) *Client {
-	err := LoadLibrary()
-	if err != nil {
-		panic(err)
+func NewClient(router RouterInterface) (*Client, error) {
+	if err := LoadLibrary(); err != nil {
+		return nil, fmt.Errorf("steam bridge load: %w", err)
 	}
-
 	if !bridgeInit() {
-		panic("Bridge_Init failed")
+		return nil, errors.New("Bridge_Init failed")
 	}
-
 	return &Client{
 		router:   router,
 		steamIDs: make(map[uint64]bool),
 		ipPool:   ipam.NewPool(),
-	}
+	}, nil
 }
 
 func (c *Client) AddPeer(steamID uint64) {
@@ -58,13 +57,6 @@ func (c *Client) SendToPeer(steamID uint64, frame []byte) {
 	if len(frame) == 0 {
 		return
 	}
-
-	// sendType := 0
-	// Let TCP handle reliability
-	// if reliable {
-	// 	sendType = 1
-	// }
-
 	bridgeSend(steamID, &frame[0], len(frame))
 }
 
@@ -76,12 +68,6 @@ func (c *Client) SendToPeerReliable(steamID uint64, frame []byte) {
 }
 
 func (c *Client) SendToAll(frame []byte) {
-	// sendType := 0
-	// Let TCP handle reliability
-	// if reliable {
-	// 	sendType = 1
-	// }
-
 	c.peermutex.RLock()
 	defer c.peermutex.RUnlock()
 
