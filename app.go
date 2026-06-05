@@ -50,13 +50,15 @@ func (a *App) Greet(name string) string {
 
 func (a *App) InitNetwork() {
 	runtime.LogDebug(a.ctx, "Initializing TAP interface")
-	a.facade.Start(a.ctx)
+	if err := a.facade.Start(a.ctx); err != nil {
+		runtime.LogErrorf(a.ctx, "Failed to start network: %v", err)
+		return
+	}
 	x, y := utils.SteamIDToTapCoords(a.facade.GetLocalSteamID())
-
-	runtime.LogDebugf(a.ctx, "Initializing tap interface IP: 10.209.%d,%d", x, y)
+	runtime.LogDebugf(a.ctx, "Initializing tap interface IP: 10.209.%d.%d", x, y)
 }
 
 func (a *App) JoinLobby(steamID uint64) error {
 	runtime.LogDebugf(a.ctx, "Attempting to join Steam ID %d(0 means hosting)", steamID)
-	return nil
+	return fmt.Errorf("not implemented")
 }

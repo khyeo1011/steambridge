@@ -74,7 +74,36 @@ jobs:
         cd cbridge
         call build.bat
 
-    - name: Run Go Tests
+    - name: Download Wintun (Windows Only)
+      if: runner.os == 'Windows'
+      shell: powershell
+      run: |
+        $ErrorActionPreference = 'Stop'
+
+        # Download the Wintun zip archive
+        Invoke-WebRequest -Uri "https://www.wintun.net/builds/wintun-0.14.1.zip" -OutFile "wintun.zip"
+
+        # Extract the archive
+        Expand-Archive -Path "wintun.zip" -DestinationPath "wintun" -Force
+
+        $dll = "wintun/wintun/bin/amd64/wintun.dll"
+
+        # Repo root — used by TestMain to copy alongside the test binary
+        Copy-Item -Path $dll -Destination "./" -Force
+
+        # internal/tun CWD — where go test runs the tun package; LoadLibrary searches CWD
+        Copy-Item -Path $dll -Destination "./internal/tun/" -Force
+
+        # Clean up the zip file to keep the workspace tidy
+        Remove-Item -Path "wintun.zip" -Force
+
+    - name: Run Go Tests (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo go test -v ./internal/...
+
+    - name: Run Go Tests (Windows)
+      if: runner.os == 'Windows'
       run: |
         go test -v ./internal/...
 

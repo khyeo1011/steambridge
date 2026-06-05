@@ -3,37 +3,48 @@ package steam
 import (
 	"context"
 	"encoding/binary"
+	"errors"
+	"fmt"
 	"log"
 	"net"
 	"steambridge/internal/ipam"
 	"steambridge/internal/protocol"
-	"steambridge/internal/switchboard"
+	"steambridge/internal/router"
+	"steambridge/internal/utils"
 	"sync"
 	"time"
 )
 
+type RouterInterface interface {
+	HandleIngress(senderID uint64, packet []byte)
+	SetSteamSender(s router.SteamSender)
+	StartEgress(ctx context.Context)
+	AddPort(port uint16)
+	RemovePort(port uint16)
+	SetFirewall(enabled bool)
+	SetIP(ip uint32) error
+	GetDevName() string
+}
+
 type Client struct {
-	router    *switchboard.Router
+	router    RouterInterface
 	peermutex sync.RWMutex
 	steamIDs  map[uint64]bool
 	ipPool    *ipam.Pool
 }
 
-func NewClient(router *switchboard.Router) *Client {
-	err := LoadLibrary()
-	if err != nil {
-		panic(err)
+func NewClient(router RouterInterface) (*Client, error) {
+	if err := LoadLibrary(); err != nil {
+		return nil, fmt.Errorf("steam bridge load: %w", err)
 	}
-
 	if !bridgeInit() {
-		panic("Bridge_Init failed")
+		return nil, errors.New("Bridge_Init failed")
 	}
-
 	return &Client{
 		router:   router,
 		steamIDs: make(map[uint64]bool),
 		ipPool:   ipam.NewPool(),
-	}
+	}, nil
 }
 
 func (c *Client) AddPeer(steamID uint64) {
@@ -46,13 +57,6 @@ func (c *Client) SendToPeer(steamID uint64, frame []byte) {
 	if len(frame) == 0 {
 		return
 	}
-
-	// sendType := 0
-	// Let TCP handle reliability
-	// if reliable {
-	// 	sendType = 1
-	// }
-
 	bridgeSend(steamID, &frame[0], len(frame))
 }
 
@@ -64,12 +68,6 @@ func (c *Client) SendToPeerReliable(steamID uint64, frame []byte) {
 }
 
 func (c *Client) SendToAll(frame []byte) {
-	// sendType := 0
-	// Let TCP handle reliability
-	// if reliable {
-	// 	sendType = 1
-	// }
-
 	c.peermutex.RLock()
 	defer c.peermutex.RUnlock()
 
@@ -126,16 +124,16 @@ func (c *Client) ReadLoop(ctx context.Context) {
 				case protocol.ActionRequestIP:
 					assignedIP := c.ipPool.Allocate(remoteSteamID)
 					c.SendControlMessage(remoteSteamID, protocol.ActionOfferIP, assignedIP)
-					log.Printf("Assigned IP %s to %v", ipam.IntIPtoString(assignedIP), remoteSteamID)
+					log.Printf("Assigned IP %s to %v", utils.IntIPtoString(assignedIP), remoteSteamID)
 				case protocol.ActionOfferIP:
-					err := setTAPIP(msg.IP, c.router.GetTap())
+					err := c.router.SetIP(msg.IP)
 					if err != nil {
 						c.SendControlMessage(remoteSteamID, protocol.ActionNackIP, 0)
 						continue
 					}
 					assigned := false
 					for i := 0; i < 3; i++ {
-						iface, err := net.InterfaceByName(c.router.GetTap().Name())
+						iface, err := net.InterfaceByName(c.router.GetDevName())
 						addrs, err := iface.Addrs()
 						if err != nil {
 							log.Printf("Error getting addresses")
@@ -143,8 +141,8 @@ func (c *Client) ReadLoop(ctx context.Context) {
 						}
 						for _, addr := range addrs {
 							if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-								if ipnet.IP.String() == ipam.IntIPtoString(msg.IP) {
-									log.Printf("Received IP %s from %v", ipam.IntIPtoString(msg.IP), remoteSteamID)
+								if ipnet.IP.String() == utils.IntIPtoString(msg.IP) {
+									log.Printf("Received IP %s from %v", utils.IntIPtoString(msg.IP), remoteSteamID)
 									c.SendControlMessage(remoteSteamID, protocol.ActionAckIP, msg.IP)
 									assigned = true
 									break
@@ -160,11 +158,11 @@ func (c *Client) ReadLoop(ctx context.Context) {
 						c.SendControlMessage(remoteSteamID, protocol.ActionNackIP, msg.IP)
 					}
 				case protocol.ActionAckIP:
-					log.Printf("Received ACK for IP %s from %v", ipam.IntIPtoString(msg.IP), remoteSteamID)
+					log.Printf("Received ACK for IP %s from %v", utils.IntIPtoString(msg.IP), remoteSteamID)
 				case protocol.ActionNackIP:
 					if msg.IP != 0 {
 						c.ipPool.Release(msg.IP)
-						log.Printf("Releasing IP %s", ipam.IntIPtoString(msg.IP))
+						log.Printf("Releasing IP %s", utils.IntIPtoString(msg.IP))
 					} else {
 						log.Printf("Peceived 0 as nack op")
 					}

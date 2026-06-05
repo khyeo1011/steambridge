@@ -1,7 +1,6 @@
 package ipam
 
 import (
-	"fmt"
 	"sync"
 )
 
@@ -35,10 +34,6 @@ func (p *Pool) Allocate(steamID uint64) uint32 {
 	return ip
 }
 
-func IntIPtoString(ip uint32) string {
-	return fmt.Sprintf("%d.%d.%d.%d", ip>>24, (ip>>16)&0xFF, (ip>>8)&0xFF, ip&0xFF)
-}
-
 func (p *Pool) Release(ip uint32) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -50,8 +45,3 @@ func (p *Pool) Release(ip uint32) {
 	}
 }
 
-func (p *Pool) RealeaseSteamID(steamID uint64) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	delete(p.leases, steamID)
-}
