@@ -1,7 +1,7 @@
 # SteamBridge
 
 > [!IMPORTANT]
-> **Current Status:** The project is on the `reflect` branch with an active refactor in progress. See the [Roadmap](#-roadmap) for what's done and what's next.
+> **Current Status:** The project is in progress. See the [Roadmap](#-roadmap) for what's done and what's next.
 
 SteamBridge is a high-performance, custom Layer 2/Layer 4 virtual tunneling application written in Go. It routes raw Ethernet frames over the Steam P2P network (via the Steamworks SDK), effectively turning the Steam backbone into a zero-configuration, secure Virtual Private LAN for gaming.
 
