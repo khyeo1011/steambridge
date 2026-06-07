@@ -32,3 +32,13 @@ func (t *Table) Delete(ip uint32) {
 	defer t.mutex.Unlock()
 	delete(t.table, ip)
 }
+
+func (t *Table) Snapshot() map[uint32]uint64 {
+	t.mutex.RLock()
+	defer t.mutex.RUnlock()
+	out := make(map[uint32]uint64, len(t.table))
+	for k, v := range t.table {
+		out[k] = v
+	}
+	return out
+}
