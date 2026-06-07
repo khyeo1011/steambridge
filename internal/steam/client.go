@@ -12,6 +12,7 @@ import (
 	"steambridge/internal/router"
 	"steambridge/internal/utils"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -31,6 +32,7 @@ type Client struct {
 	peermutex sync.RWMutex
 	steamIDs  map[uint64]bool
 	ipPool    *ipam.Pool
+	localIP   atomic.Uint32
 }
 
 func NewClient(router RouterInterface) (*Client, error) {
@@ -144,6 +146,7 @@ func (c *Client) ReadLoop(ctx context.Context) {
 								if ipnet.IP.String() == utils.IntIPtoString(msg.IP) {
 									log.Printf("Received IP %s from %v", utils.IntIPtoString(msg.IP), remoteSteamID)
 									c.SendControlMessage(remoteSteamID, protocol.ActionAckIP, msg.IP)
+									c.localIP.Store(msg.IP)
 									assigned = true
 									break
 								}
@@ -192,4 +195,8 @@ func (c *Client) Close() {
 
 func (c *Client) GetLocalSteamID() uint64 {
 	return bridgeGetLocalSteamID()
+}
+
+func (c *Client) GetLocalIP() uint32 {
+	return c.localIP.Load()
 }

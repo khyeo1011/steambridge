@@ -9,6 +9,7 @@ import (
 	"steambridge/internal/steam"
 	"steambridge/internal/tun"
 	"sync"
+	"sync/atomic"
 )
 
 type Config struct {
@@ -28,6 +29,7 @@ type Facade struct {
 	cancelFunc      context.CancelFunc
 	bootstrapPeerID uint64
 	readyChan       chan struct{}
+	running         atomic.Bool
 }
 
 func NewFacade(config Config) *Facade {
@@ -43,6 +45,9 @@ func NewFacade(config Config) *Facade {
 }
 
 func (f *Facade) Start(ctx context.Context) error {
+	if f.running.Load() {
+		return nil
+	}
 	log.Printf("Setting up TAP interface: %s\n", f.ifaceName)
 	tunDev, err := tun.NewTUN(f.ifaceName, f.ifaceID)
 	if err != nil {
@@ -66,6 +71,7 @@ func (f *Facade) Start(ctx context.Context) error {
 
 	f.router.SetSteamSender(f.client)
 	log.Printf("SteamBridge is live on interface '%s'! Waiting for shutdown.\n", f.ifaceName)
+	f.running.Store(true)
 	engineCtx, cancel := context.WithCancel(ctx)
 	f.cancelFunc = cancel
 	f.wg.Add(2)
@@ -104,6 +110,7 @@ func (f *Facade) Stop() error {
 	}
 
 	f.wg.Wait()
+	f.running.Store(false)
 
 	return nil
 }
@@ -122,4 +129,36 @@ func (f *Facade) SetFirewall(enabled bool) {
 
 func (f *Facade) GetLocalSteamID() uint64 {
 	return f.client.GetLocalSteamID()
+}
+
+func (f *Facade) IsRunning() bool {
+	return f.running.Load()
+}
+
+func (f *Facade) GetLocalIP() uint32 {
+	if f.client == nil {
+		return 0
+	}
+	return f.client.GetLocalIP()
+}
+
+func (f *Facade) GetPeerTable() map[uint32]uint64 {
+	if f.router == nil {
+		return nil
+	}
+	return f.router.GetPeers()
+}
+
+func (f *Facade) GetFirewallState() bool {
+	if f.router == nil {
+		return false
+	}
+	return f.router.GetFirewallState()
+}
+
+func (f *Facade) GetAllowedPorts() []uint16 {
+	if f.router == nil {
+		return nil
+	}
+	return f.router.GetAllowedPorts()
 }

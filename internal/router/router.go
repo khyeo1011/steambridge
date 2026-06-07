@@ -129,3 +129,20 @@ func (r *Router) SetIP(ip uint32) error {
 func (r *Router) GetDevName() string {
 	return r.tunDev.Name()
 }
+
+func (r *Router) GetFirewallState() bool {
+	return r.firewallEnabled.Load()
+}
+
+func (r *Router) GetAllowedPorts() []uint16 {
+	var ports []uint16
+	r.allowedPorts.Range(func(key, _ any) bool {
+		ports = append(ports, key.(uint16))
+		return true
+	})
+	return ports
+}
+
+func (r *Router) GetPeers() map[uint32]uint64 {
+	return r.table.Snapshot()
+}
