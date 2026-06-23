@@ -16,6 +16,10 @@ var (
 	bridgeSend            func(steamId uint64, data *byte, size int) bool
 	bridgeSendReliable    func(steamId uint64, data *byte, size int) bool
 	bridgeGetLocalSteamID func() uint64
+
+	bridgeGetJoinRequest     func() uint64
+	bridgeSetJoinable        func(joinable bool)
+	bridgeOpenFriendsOverlay func()
 )
 
 func LoadLibrary() error {
@@ -38,6 +42,9 @@ func LoadLibrary() error {
 	purego.RegisterLibFunc(&bridgeSend, libc, "Bridge_Send")
 	purego.RegisterLibFunc(&bridgeSendReliable, libc, "Bridge_SendReliable")
 	purego.RegisterLibFunc(&bridgeGetLocalSteamID, libc, "Bridge_GetLocalSteamID")
+	purego.RegisterLibFunc(&bridgeGetJoinRequest, libc, "Bridge_GetJoinRequest")
+	purego.RegisterLibFunc(&bridgeSetJoinable, libc, "Bridge_SetJoinable")
+	purego.RegisterLibFunc(&bridgeOpenFriendsOverlay, libc, "Bridge_OpenFriendsOverlay")
 
 	return err
 }

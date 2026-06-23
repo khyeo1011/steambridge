@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"steambridge/internal/facade"
 	"steambridge/internal/utils"
+	"strconv"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -39,6 +40,10 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	// SteamID emitted as a string to avoid JS float64 precision loss.
+	a.facade.SetJoinHandler(func(id uint64) {
+		runtime.EventsEmit(a.ctx, "joinRequest", fmt.Sprintf("%d", id))
+	})
 }
 
 func (a *App) domReady(ctx context.Context) {
@@ -119,7 +124,17 @@ func (a *App) ToggleFirewall(enabled bool) {
 	a.facade.SetFirewall(enabled)
 }
 
-func (a *App) JoinLobby(steamID uint64) error {
-	runtime.LogDebugf(a.ctx, "Attempting to join Steam ID %d (0 means hosting)", steamID)
-	return fmt.Errorf("not implemented")
+// JoinLobby initiates a join with a host by SteamID. The ID is passed as a
+// string because 17-digit SteamIDs exceed JS's safe integer range.
+func (a *App) JoinLobby(steamID string) error {
+	id, err := strconv.ParseUint(steamID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid Steam ID %q: %w", steamID, err)
+	}
+	runtime.LogDebugf(a.ctx, "Attempting to join Steam ID %d", id)
+	return a.facade.Join(id)
+}
+
+func (a *App) OpenFriendsOverlay() {
+	a.facade.OpenFriendsOverlay()
 }

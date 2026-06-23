@@ -10,12 +10,15 @@ require (
 require (
 	github.com/ebitengine/purego v0.10.0 // direct
 	github.com/vishvananda/netns v0.0.5 // indirect
-	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/sys v0.30.0
 )
 
 replace golang.org/x/tools => golang.org/x/tools v0.14.0
 
-require github.com/wailsapp/wails/v2 v2.11.0
+require (
+	github.com/wailsapp/wails/v2 v2.11.0
+	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2
+)
 
 require (
 	github.com/bep/debounce v1.2.1 // indirect
@@ -44,5 +47,4 @@ require (
 	golang.org/x/crypto v0.33.0 // indirect
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
-	golang.zx2c4.com/wintun v0.0.0-20230126152724-0fa3db229ce2 // indirect
 )

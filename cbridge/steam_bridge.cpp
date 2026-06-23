@@ -1,17 +1,28 @@
 #include "steam_bridge.h"
 #include <steam/steam_api.h>
+#include <atomic>
 
-
+// SteamID of a friend whose "Join Game" we received but haven't acted on yet.
+// Go drains this once per ReadLoop iteration via Bridge_GetJoinRequest().
+std::atomic<uint64_t> g_pendingJoin{0};
 
 class BridgeCallbacks {
 public:
-    BridgeCallbacks() : m_CallbackP2PSessionRequest(this, &BridgeCallbacks::OnP2PSessionRequest) {}
+    BridgeCallbacks()
+        : m_CallbackP2PSessionRequest(this, &BridgeCallbacks::OnP2PSessionRequest),
+          m_CallbackJoinRequested(this, &BridgeCallbacks::OnGameRichPresenceJoinRequested) {}
 
     STEAM_CALLBACK(BridgeCallbacks, OnP2PSessionRequest, P2PSessionRequest_t, m_CallbackP2PSessionRequest);
+    STEAM_CALLBACK(BridgeCallbacks, OnGameRichPresenceJoinRequested, GameRichPresenceJoinRequested_t, m_CallbackJoinRequested);
 };
 
 void BridgeCallbacks::OnP2PSessionRequest(P2PSessionRequest_t *pCallback) {
     SteamNetworking()->AcceptP2PSessionWithUser(pCallback->m_steamIDRemote);
+}
+
+void BridgeCallbacks::OnGameRichPresenceJoinRequested(GameRichPresenceJoinRequested_t *pCallback) {
+    // m_steamIDFriend is the host whose session the local user chose to join.
+    g_pendingJoin.store(pCallback->m_steamIDFriend.ConvertToUint64());
 }
 
 BridgeCallbacks* g_Callbacks = nullptr;
@@ -64,4 +75,17 @@ BRIDGE_EXPORT void Bridge_RunCallbacks() {
 BRIDGE_EXPORT uint64_t Bridge_GetLocalSteamID() {
     CSteamID localSteamID = SteamUser()->GetSteamID();
     return localSteamID.ConvertToUint64();
+}
+
+BRIDGE_EXPORT uint64_t Bridge_GetJoinRequest() {
+    return g_pendingJoin.exchange(0);
+}
+
+BRIDGE_EXPORT void Bridge_SetJoinable(bool joinable) {
+    // A non-empty "connect" key makes "Join Game" appear in the friends list.
+    SteamFriends()->SetRichPresence("connect", joinable ? "steambridge" : "");
+}
+
+BRIDGE_EXPORT void Bridge_OpenFriendsOverlay() {
+    SteamFriends()->ActivateGameOverlay("friends");
 }

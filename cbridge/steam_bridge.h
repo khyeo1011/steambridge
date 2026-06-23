@@ -21,3 +21,9 @@ BRIDGE_EXPORT int Bridge_Receive(uint8_t* buffer, int bufferSize, uint64_t * out
 BRIDGE_EXPORT void Bridge_RunCallbacks();
 
 BRIDGE_EXPORT uint64_t Bridge_GetLocalSteamID();
+
+BRIDGE_EXPORT uint64_t Bridge_GetJoinRequest();
+
+BRIDGE_EXPORT void Bridge_SetJoinable(bool joinable);
+
+BRIDGE_EXPORT void Bridge_OpenFriendsOverlay();

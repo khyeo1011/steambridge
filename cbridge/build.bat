@@ -1,7 +1,7 @@
 @echo off
 REM Create the build directory and generate build files
 echo Generating build system...
-cmake -B ./build
+cmake -G "MinGW Makefiles" -B ./build -S .
 
 REM Check if the previous command succeeded
 if %ERRORLEVEL% NEQ 0 (

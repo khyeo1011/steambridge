@@ -30,6 +30,13 @@ type Facade struct {
 	bootstrapPeerID uint64
 	readyChan       chan struct{}
 	running         atomic.Bool
+	onJoinRequest   func(uint64)
+}
+
+// SetJoinHandler registers a callback invoked when a join is initiated. Must be
+// called before Start so it can be wired to the client at creation.
+func (f *Facade) SetJoinHandler(fn func(uint64)) {
+	f.onJoinRequest = fn
 }
 
 func NewFacade(config Config) *Facade {
@@ -64,6 +71,8 @@ func (f *Facade) Start(ctx context.Context) error {
 		return fmt.Errorf("steam client init: %w", err)
 	}
 	f.client = client
+	f.client.SetJoinHandler(f.onJoinRequest)
+	f.client.SetJoinable(true)
 
 	if f.bootstrapPeerID != 0 {
 		f.client.AddPeer(f.bootstrapPeerID)
@@ -94,6 +103,9 @@ func (f *Facade) Start(ctx context.Context) error {
 }
 
 func (f *Facade) Stop() error {
+	if f.client != nil {
+		f.client.SetJoinable(false)
+	}
 	if f.bootstrapPeerID != 0 {
 		f.client.SendControlMessage(f.bootstrapPeerID, protocol.ActionNackIP, 0)
 	}
@@ -113,6 +125,20 @@ func (f *Facade) Stop() error {
 	f.running.Store(false)
 
 	return nil
+}
+
+func (f *Facade) Join(host uint64) error {
+	if !f.running.Load() {
+		return fmt.Errorf("bridge not running")
+	}
+	f.client.Join(host)
+	return nil
+}
+
+func (f *Facade) OpenFriendsOverlay() {
+	if f.client != nil {
+		f.client.OpenFriendsOverlay()
+	}
 }
 
 func (f *Facade) AddPort(port uint16) {

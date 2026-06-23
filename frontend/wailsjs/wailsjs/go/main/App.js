@@ -26,6 +26,10 @@ export function JoinLobby(arg1) {
   return window['go']['main']['App']['JoinLobby'](arg1);
 }
 
+export function OpenFriendsOverlay() {
+  return window['go']['main']['App']['OpenFriendsOverlay']();
+}
+
 export function RemovePort(arg1) {
   return window['go']['main']['App']['RemovePort'](arg1);
 }

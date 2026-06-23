@@ -2,9 +2,12 @@ import type { NextPage } from 'next'
 import Head from 'next/head'
 import { useState, useEffect, useCallback } from 'react'
 import styles from './index.module.css'
-import type { StatusPayload, PeerInfo } from '../wailsjs/wailsjs/go/main/App'
 import * as WailsApp from '../wailsjs/wailsjs/go/main/App'
-import { mockApp, isWails } from '../wailsjs/wailsjs/go/main/mock'
+import { mockApp, isWails } from '../lib/mock'
+import { main } from '../wailsjs/wailsjs/go/models'
+type StatusPayload = main.StatusPayload
+type PeerInfo = main.PeerInfo
+import { EventsOn } from '../wailsjs/wailsjs/runtime'
 
 const app = {
   StartBridge: () => isWails() ? WailsApp.StartBridge() : mockApp.StartBridge(),
@@ -16,6 +19,8 @@ const app = {
   AddPort: (p: number) => isWails() ? WailsApp.AddPort(p) : mockApp.AddPort(p),
   RemovePort: (p: number) => isWails() ? WailsApp.RemovePort(p) : mockApp.RemovePort(p),
   ToggleFirewall: (e: boolean) => isWails() ? WailsApp.ToggleFirewall(e) : mockApp.ToggleFirewall(e),
+  JoinLobby: (id: string) => isWails() ? WailsApp.JoinLobby(id) : mockApp.JoinLobby(id),
+  OpenFriendsOverlay: () => isWails() ? WailsApp.OpenFriendsOverlay() : mockApp.OpenFriendsOverlay(),
 }
 
 const defaultStatus: StatusPayload = {
@@ -32,6 +37,8 @@ const Home: NextPage = () => {
   const [allowedPorts, setAllowedPorts] = useState<number[]>([])
   const [portInput, setPortInput] = useState('')
   const [busy, setBusy] = useState(false)
+  const [joinInput, setJoinInput] = useState('')
+  const [joinNotice, setJoinNotice] = useState('')
 
   const refresh = useCallback(async () => {
     const [s, p, fw, ports] = await Promise.all([
@@ -52,6 +59,15 @@ const Home: NextPage = () => {
     return () => clearInterval(id)
   }, [refresh])
 
+  useEffect(() => {
+    if (!isWails()) return
+    const unlisten = EventsOn('joinRequest', (steamID: string) => {
+      setJoinNotice(`Joining ${steamID}…`)
+      setTimeout(() => setJoinNotice(''), 5000)
+    })
+    return () => unlisten()
+  }, [])
+
   const handleStart = async () => {
     setBusy(true)
     await app.StartBridge()
@@ -64,6 +80,16 @@ const Home: NextPage = () => {
     await app.StopBridge()
     await refresh()
     setBusy(false)
+  }
+
+  const handleJoin = async () => {
+    const id = joinInput.trim()
+    if (!/^\d+$/.test(id)) return
+    await app.JoinLobby(id)
+    setJoinInput('')
+    setJoinNotice(`Joining ${id}…`)
+    setTimeout(() => setJoinNotice(''), 5000)
+    await refresh()
   }
 
   const handleToggleFirewall = async () => {
@@ -124,6 +150,38 @@ const Home: NextPage = () => {
               Stop
             </button>
           </div>
+        </div>
+      </div>
+
+      <div className={styles.card}>
+        <h2>Friends</h2>
+        {joinNotice && <p className={styles.empty}>{joinNotice}</p>}
+        <div className={styles.btnRow}>
+          <button
+            className={styles.btn}
+            onClick={() => app.OpenFriendsOverlay()}
+            disabled={!status.running}
+          >
+            Join via Steam
+          </button>
+        </div>
+        <div className={styles.portAdd}>
+          <input
+            className={styles.portInput}
+            type="text"
+            inputMode="numeric"
+            placeholder="Steam ID"
+            value={joinInput}
+            onChange={e => setJoinInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleJoin() }}
+          />
+          <button
+            className={styles.btn}
+            onClick={handleJoin}
+            disabled={!status.running}
+          >
+            Join by Steam ID
+          </button>
         </div>
       </div>
 

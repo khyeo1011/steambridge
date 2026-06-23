@@ -28,11 +28,12 @@ type RouterInterface interface {
 }
 
 type Client struct {
-	router    RouterInterface
-	peermutex sync.RWMutex
-	steamIDs  map[uint64]bool
-	ipPool    *ipam.Pool
-	localIP   atomic.Uint32
+	router        RouterInterface
+	peermutex     sync.RWMutex
+	steamIDs      map[uint64]bool
+	ipPool        *ipam.Pool
+	localIP       atomic.Uint32
+	onJoinRequest func(uint64)
 }
 
 func NewClient(router RouterInterface) (*Client, error) {
@@ -47,6 +48,32 @@ func NewClient(router RouterInterface) (*Client, error) {
 		steamIDs: make(map[uint64]bool),
 		ipPool:   ipam.NewPool(),
 	}, nil
+}
+
+// SetJoinHandler registers a callback invoked whenever a join is initiated
+// (via Steam "Join Game" or a manual join). Optional; nil is a no-op.
+func (c *Client) SetJoinHandler(fn func(uint64)) {
+	c.onJoinRequest = fn
+}
+
+// Join begins the IPAM handshake with host: add it as a peer and request an IP.
+// Shared by the Steam rich-presence path and the manual "Join by Steam ID" path.
+func (c *Client) Join(host uint64) {
+	c.AddPeer(host)
+	c.SendControlMessage(host, protocol.ActionRequestIP, 0)
+	if c.onJoinRequest != nil {
+		c.onJoinRequest(host)
+	}
+}
+
+// SetJoinable advertises (or hides) this node in friends' "Join Game" menus.
+func (c *Client) SetJoinable(joinable bool) {
+	bridgeSetJoinable(joinable)
+}
+
+// OpenFriendsOverlay opens the Steam friends overlay so the user can pick a friend.
+func (c *Client) OpenFriendsOverlay() {
+	bridgeOpenFriendsOverlay()
 }
 
 func (c *Client) AddPeer(steamID uint64) {
@@ -88,6 +115,12 @@ func (c *Client) ReadLoop(ctx context.Context) {
 			return
 		default:
 			bridgeRunCallbacks()
+
+			// A friend clicked "Join Game" in Steam; start the handshake with them.
+			if host := bridgeGetJoinRequest(); host != 0 {
+				log.Printf("Steam join requested for host %v", host)
+				c.Join(host)
+			}
 
 			var remoteSteamID uint64
 			bytesRead := bridgeReceive(&buffer[0], len(buffer), &remoteSteamID)
