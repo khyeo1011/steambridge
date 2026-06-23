@@ -59,7 +59,8 @@ func (f *Facade) Start(ctx context.Context) error {
 	log.Printf("Setting up TUN interface: %s\n", f.ifaceName)
 	tunDev, err := tun.NewTUN(f.ifaceName, f.ifaceID)
 	if err != nil {
-		log.Printf("CWD: %s", os.Getwd)
+		wd, _ := os.Getwd()
+		log.Printf("CWD: %s", wd)
 		return fmt.Errorf("could not create TUN device: %w", err)
 	}
 	f.tunDev = tunDev
