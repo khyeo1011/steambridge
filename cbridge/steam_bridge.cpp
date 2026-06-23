@@ -1,5 +1,6 @@
 #include "steam_bridge.h"
 #include <steam/steam_api.h>
+#include <steam/steam_api_flat.h>
 #include <atomic>
 
 // SteamID of a friend whose "Join Game" we received but haven't acted on yet.
@@ -73,8 +74,7 @@ BRIDGE_EXPORT void Bridge_RunCallbacks() {
 }
 
 BRIDGE_EXPORT uint64_t Bridge_GetLocalSteamID() {
-    CSteamID localSteamID = SteamUser()->GetSteamID();
-    return localSteamID.ConvertToUint64();
+    return SteamAPI_ISteamUser_GetSteamID(SteamUser());
 }
 
 BRIDGE_EXPORT uint64_t Bridge_GetJoinRequest() {

@@ -33,6 +33,7 @@ type Client struct {
 	steamIDs      map[uint64]bool
 	ipPool        *ipam.Pool
 	localIP       atomic.Uint32
+	steamID       uint64
 	onJoinRequest func(uint64)
 }
 
@@ -47,6 +48,7 @@ func NewClient(router RouterInterface) (*Client, error) {
 		router:   router,
 		steamIDs: make(map[uint64]bool),
 		ipPool:   ipam.NewPool(),
+		steamID:  bridgeGetLocalSteamID(),
 	}, nil
 }
 
@@ -227,7 +229,7 @@ func (c *Client) Close() {
 }
 
 func (c *Client) GetLocalSteamID() uint64 {
-	return bridgeGetLocalSteamID()
+	return c.steamID
 }
 
 func (c *Client) GetLocalIP() uint32 {

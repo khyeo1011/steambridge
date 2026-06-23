@@ -46,6 +46,9 @@ func LoadLibrary() error {
 	}
 
 	libc, err := openLibrary(target)
+	if err != nil {
+		return err
+	}
 
 	purego.RegisterLibFunc(&bridgeInit, libc, "Bridge_Init")
 	purego.RegisterLibFunc(&bridgeRunCallbacks, libc, "Bridge_RunCallbacks")
@@ -64,5 +67,5 @@ func LoadLibrary() error {
 	tryRegisterLibFunc(&bridgeSetJoinable, libc, "Bridge_SetJoinable")
 	tryRegisterLibFunc(&bridgeOpenFriendsOverlay, libc, "Bridge_OpenFriendsOverlay")
 
-	return err
+	return nil
 }

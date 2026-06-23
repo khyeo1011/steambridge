@@ -25,12 +25,19 @@ if (WIN32)
     
     add_custom_command(TARGET steam_bridge POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/sdk/redistributable_bin/win64/steam_api64.dll"
-        "${CMAKE_CURRENT_SOURCE_DIR}/.."
-        
+            "${CMAKE_CURRENT_SOURCE_DIR}/sdk/redistributable_bin/win64/steam_api64.dll"
+            "${CMAKE_CURRENT_SOURCE_DIR}/.."
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE:steam_bridge>
-        "${CMAKE_CURRENT_SOURCE_DIR}/.."
+            $<TARGET_FILE:steam_bridge>
+            "${CMAKE_CURRENT_SOURCE_DIR}/.."
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/../build/bin"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/sdk/redistributable_bin/win64/steam_api64.dll"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../build/bin"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:steam_bridge>
+            "${CMAKE_CURRENT_SOURCE_DIR}/../build/bin"
     )
 else()
     target_link_directories(steam_bridge PRIVATE 
@@ -43,12 +50,18 @@ else()
 
     add_custom_command(TARGET steam_bridge POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/sdk/redistributable_bin/linux64/libsteam_api.so"
-        "${CMAKE_CURRENT_SOURCE_DIR}/.."
-        
-        # 2. Copy YOUR newly built .so to the project root
+            "${CMAKE_CURRENT_SOURCE_DIR}/sdk/redistributable_bin/linux64/libsteam_api.so"
+            "${CMAKE_CURRENT_SOURCE_DIR}/.."
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE:steam_bridge>
-        "${CMAKE_CURRENT_SOURCE_DIR}/.."
+            $<TARGET_FILE:steam_bridge>
+            "${CMAKE_CURRENT_SOURCE_DIR}/.."
+        COMMAND ${CMAKE_COMMAND} -E make_directory
+            "${CMAKE_CURRENT_SOURCE_DIR}/../build/bin"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/sdk/redistributable_bin/linux64/libsteam_api.so"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../build/bin"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:steam_bridge>
+            "${CMAKE_CURRENT_SOURCE_DIR}/../build/bin"
     )
 endif()

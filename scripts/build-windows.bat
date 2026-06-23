@@ -1,13 +1,27 @@
 @echo off
+pushd "%~dp0.."
 
-echo Start running the script...
-cd ../
-
-cd ./cbridge
+echo Building cbridge DLL...
+pushd cbridge
 CALL build.bat
-cd ../
+popd
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] cbridge build failed.
+    popd
+    exit /b %ERRORLEVEL%
+)
 
-echo Start building the app for windows platform...
+echo Building Wails app...
 wails build --clean --platform windows/amd64
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] Wails build failed.
+    popd
+    exit /b %ERRORLEVEL%
+)
 
-echo End running the script!
+echo Copying runtime DLLs to build\bin...
+copy /Y "libsteam_bridge.dll" "build\bin\libsteam_bridge.dll"
+copy /Y "steam_api64.dll" "build\bin\steam_api64.dll"
+
+echo Done.
+popd
