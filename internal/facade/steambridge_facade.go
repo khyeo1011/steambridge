@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"steambridge/internal/protocol"
 	"steambridge/internal/router"
 	"steambridge/internal/steam"
@@ -55,10 +56,11 @@ func (f *Facade) Start(ctx context.Context) error {
 	if f.running.Load() {
 		return nil
 	}
-	log.Printf("Setting up TAP interface: %s\n", f.ifaceName)
+	log.Printf("Setting up TUN interface: %s\n", f.ifaceName)
 	tunDev, err := tun.NewTUN(f.ifaceName, f.ifaceID)
 	if err != nil {
-		return fmt.Errorf("could not create TAP device: %w", err)
+		log.Printf("CWD: %s", os.Getwd)
+		return fmt.Errorf("could not create TUN device: %w", err)
 	}
 	f.tunDev = tunDev
 
