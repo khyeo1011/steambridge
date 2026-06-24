@@ -44,6 +44,13 @@ func (a *App) startup(ctx context.Context) {
 	a.facade.SetJoinHandler(func(id uint64) {
 		runtime.EventsEmit(a.ctx, "joinRequest", fmt.Sprintf("%d", id))
 	})
+	a.facade.SetJoinResultHandler(func(id uint64, connected bool) {
+		state := "failed"
+		if connected {
+			state = "connected"
+		}
+		runtime.EventsEmit(a.ctx, "joinResult", fmt.Sprintf("%d", id), state)
+	})
 }
 
 func (a *App) domReady(ctx context.Context) {
@@ -136,5 +143,5 @@ func (a *App) JoinLobby(steamID string) error {
 }
 
 func (a *App) OpenFriendsOverlay() {
-	a.facade.OpenFriendsOverlay()
+	runtime.BrowserOpenURL(a.ctx, "steam://open/friends")
 }

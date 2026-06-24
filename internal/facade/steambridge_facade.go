@@ -32,12 +32,19 @@ type Facade struct {
 	readyChan       chan struct{}
 	running         atomic.Bool
 	onJoinRequest   func(uint64)
+	onJoinResult    func(uint64, bool)
 }
 
 // SetJoinHandler registers a callback invoked when a join is initiated. Must be
 // called before Start so it can be wired to the client at creation.
 func (f *Facade) SetJoinHandler(fn func(uint64)) {
 	f.onJoinRequest = fn
+}
+
+// SetJoinResultHandler registers a callback invoked once per join with the outcome.
+// Must be called before Start.
+func (f *Facade) SetJoinResultHandler(fn func(uint64, bool)) {
+	f.onJoinResult = fn
 }
 
 func NewFacade(config Config) *Facade {
@@ -75,6 +82,7 @@ func (f *Facade) Start(ctx context.Context) error {
 	}
 	f.client = client
 	f.client.SetJoinHandler(f.onJoinRequest)
+	f.client.SetJoinResultHandler(f.onJoinResult)
 	f.client.SetJoinable(true)
 
 	if f.bootstrapPeerID != 0 {

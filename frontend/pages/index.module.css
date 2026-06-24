@@ -424,6 +424,58 @@
   border-radius: 0.25rem;
 }
 
+.connectionList {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.connectionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.connectionSteamID {
+  font-family: 'Courier New', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusPending {
+  font-size: 0.7rem;
+  background: rgba(0, 210, 255, 0.08);
+  color: var(--primary);
+  border: 1px solid rgba(0, 210, 255, 0.2);
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.25rem;
+  animation: pulse 1.6s infinite ease-in-out;
+}
+
+.statusConnected {
+  font-size: 0.7rem;
+  background: rgba(16, 185, 129, 0.1);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.25rem;
+}
+
+.statusFailed {
+  font-size: 0.7rem;
+  background: rgba(244, 63, 94, 0.1);
+  color: #fb7185;
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.25rem;
+}
+
 /* Firewall styles */
 .firewallHeader {
   display: flex;

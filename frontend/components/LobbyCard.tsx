@@ -1,16 +1,18 @@
 import React, { useState } from 'react'
 import styles from '../pages/index.module.css'
 
+type ConnectionState = 'pending' | 'connected' | 'failed'
+
 interface LobbyCardProps {
   running: boolean
-  joinNotice: string
+  connections: Record<string, ConnectionState>
   onJoinLobby: (steamID: string) => Promise<void>
   onOpenOverlay: () => void
 }
 
 export const LobbyCard: React.FC<LobbyCardProps> = ({
   running,
-  joinNotice,
+  connections,
   onJoinLobby,
   onOpenOverlay,
 }) => {
@@ -23,11 +25,17 @@ export const LobbyCard: React.FC<LobbyCardProps> = ({
     setJoinInput('')
   }
 
+  const badgeClass = (state: ConnectionState) =>
+    state === 'pending' ? styles.statusPending :
+    state === 'connected' ? styles.statusConnected :
+    styles.statusFailed
+
+  const entries = Object.entries(connections)
+
   return (
     <div className={styles.card}>
       <h2>Lobby Connections</h2>
-      {joinNotice && <div className={styles.noticeText}>{joinNotice}</div>}
-      
+
       <div className={styles.friendsLayout}>
         <div className={styles.friendsActionRow}>
           <button
@@ -45,7 +53,7 @@ export const LobbyCard: React.FC<LobbyCardProps> = ({
             Join via Steam Friends
           </button>
         </div>
-        
+
         <div className={styles.friendsInputContainer}>
           <input
             className={styles.input}
@@ -65,6 +73,17 @@ export const LobbyCard: React.FC<LobbyCardProps> = ({
             Join Lobby
           </button>
         </div>
+
+        {entries.length > 0 && (
+          <ul className={styles.connectionList}>
+            {entries.map(([steamID, state]) => (
+              <li key={steamID} className={styles.connectionRow}>
+                <span className={styles.connectionSteamID}>{steamID}</span>
+                <span className={badgeClass(state)}>{state}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   )

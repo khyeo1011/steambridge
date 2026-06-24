@@ -43,7 +43,7 @@ const Home: NextPage = () => {
   const [firewallEnabled, setFirewallEnabled] = useState(false)
   const [allowedPorts, setAllowedPorts] = useState<number[]>([])
   const [busy, setBusy] = useState(false)
-  const [joinNotice, setJoinNotice] = useState('')
+  const [connections, setConnections] = useState<Record<string, 'pending' | 'connected' | 'failed'>>({})
   const [copiedIP, setCopiedIP] = useState(false)
   const [copiedSteamID, setCopiedSteamID] = useState(false)
 
@@ -68,11 +68,27 @@ const Home: NextPage = () => {
 
   useEffect(() => {
     if (!isWails()) return
-    const unlisten = EventsOn('joinRequest', (steamID: string) => {
-      setJoinNotice(`Joining ${steamID}…`)
-      setTimeout(() => setJoinNotice(''), 5000)
+    // Track unlisteners for cleanup
+    let unsubscribeRequest: () => void;
+    let unsubscribeResult: () => void;
+
+    unsubscribeRequest = EventsOn('joinRequest', (steamID: string) => {
+      setConnections(connections => ({
+        ...connections,
+        [steamID]: 'pending'
+      }));
     })
-    return () => unlisten()
+
+    unsubscribeResult = EventsOn('joinResult', (steamID: string, state: 'connected' | 'failed') => {
+      setConnections(connections => ({
+        ...connections,
+        [steamID]: state
+      }))
+    })
+    return () => {
+      if (unsubscribeRequest) unsubscribeRequest();
+      if (unsubscribeResult) unsubscribeResult();
+    }
   }, [])
 
   const handleStart = async () => {
@@ -90,9 +106,12 @@ const Home: NextPage = () => {
   }
 
   const handleJoin = async (steamID: string) => {
+    setConnections(prev => ({ ...prev, [steamID]: 'pending' }))
+    // In browser mode, simulate the result after a short delay so the UI is testable.
+    if (!isWails()) {
+      setTimeout(() => setConnections(prev => ({ ...prev, [steamID]: 'connected' })), 1500)
+    }
     await app.JoinLobby(steamID)
-    setJoinNotice(`Joining ${steamID}…`)
-    setTimeout(() => setJoinNotice(''), 5000)
     await refresh()
   }
 
@@ -161,7 +180,7 @@ const Home: NextPage = () => {
         <div className={styles.rightCol}>
           <LobbyCard
             running={status.running}
-            joinNotice={joinNotice}
+            connections={connections}
             onJoinLobby={handleJoin}
             onOpenOverlay={() => app.OpenFriendsOverlay()}
           />

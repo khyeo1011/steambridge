@@ -27,6 +27,10 @@ type RouterInterface interface {
 	GetDevName() string
 }
 
+// joinResultTimeout is how long the guest waits for an IPAM offer before
+// treating the join as failed.
+const joinResultTimeout = 10 * time.Second
+
 type Client struct {
 	router        RouterInterface
 	peermutex     sync.RWMutex
@@ -35,6 +39,9 @@ type Client struct {
 	localIP       atomic.Uint32
 	steamID       uint64
 	onJoinRequest func(uint64)
+	onJoinResult  func(uint64, bool) // fired once per join: true=connected, false=failed/timeout
+	joinMutex     sync.Mutex
+	pendingJoins  map[uint64]bool // hosts we sent ActionRequestIP to but haven't resolved yet
 }
 
 func NewClient(router RouterInterface) (*Client, error) {
@@ -45,10 +52,11 @@ func NewClient(router RouterInterface) (*Client, error) {
 		return nil, errors.New("Bridge_Init failed")
 	}
 	return &Client{
-		router:   router,
-		steamIDs: make(map[uint64]bool),
-		ipPool:   ipam.NewPool(),
-		steamID:  bridgeGetLocalSteamID(),
+		router:       router,
+		steamIDs:     make(map[uint64]bool),
+		pendingJoins: make(map[uint64]bool),
+		ipPool:       ipam.NewPool(),
+		steamID:      bridgeGetLocalSteamID(),
 	}, nil
 }
 
@@ -58,11 +66,43 @@ func (c *Client) SetJoinHandler(fn func(uint64)) {
 	c.onJoinRequest = fn
 }
 
+// SetJoinResultHandler registers a callback invoked exactly once per join attempt
+// with the outcome: connected=true on IPAM ACK, false on NACK or timeout.
+func (c *Client) SetJoinResultHandler(fn func(uint64, bool)) {
+	c.onJoinResult = fn
+}
+
+// resolveJoin fires onJoinResult exactly once per host, idempotently.
+// The joinMutex guards pendingJoins so a timeout and a real ACK/NACK cannot
+// both fire the callback if they race.
+func (c *Client) resolveJoin(host uint64, connected bool) {
+	c.joinMutex.Lock()
+	if _, ok := c.pendingJoins[host]; !ok {
+		c.joinMutex.Unlock()
+		return
+	}
+	delete(c.pendingJoins, host)
+	c.joinMutex.Unlock()
+	if c.onJoinResult != nil {
+		c.onJoinResult(host, connected)
+	}
+}
+
+// joinTimeout fires a failed result if no ACK/NACK arrives within joinResultTimeout.
+func (c *Client) joinTimeout(host uint64) {
+	time.Sleep(joinResultTimeout)
+	c.resolveJoin(host, false)
+}
+
 // Join begins the IPAM handshake with host: add it as a peer and request an IP.
 // Shared by the Steam rich-presence path and the manual "Join by Steam ID" path.
 func (c *Client) Join(host uint64) {
 	c.AddPeer(host)
+	c.joinMutex.Lock()
+	c.pendingJoins[host] = true
+	c.joinMutex.Unlock()
 	c.SendControlMessage(host, protocol.ActionRequestIP, 0)
+	go c.joinTimeout(host)
 	if c.onJoinRequest != nil {
 		c.onJoinRequest(host)
 	}
@@ -166,6 +206,7 @@ func (c *Client) ReadLoop(ctx context.Context) {
 					err := c.router.SetIP(msg.IP)
 					if err != nil {
 						c.SendControlMessage(remoteSteamID, protocol.ActionNackIP, 0)
+						c.resolveJoin(remoteSteamID, false)
 						continue
 					}
 					assigned := false
@@ -182,6 +223,7 @@ func (c *Client) ReadLoop(ctx context.Context) {
 									log.Printf("Received IP %s from %v", utils.IntIPtoString(msg.IP), remoteSteamID)
 									c.SendControlMessage(remoteSteamID, protocol.ActionAckIP, msg.IP)
 									c.localIP.Store(msg.IP)
+									c.resolveJoin(remoteSteamID, true)
 									assigned = true
 									break
 								}
@@ -194,6 +236,7 @@ func (c *Client) ReadLoop(ctx context.Context) {
 					}
 					if !assigned {
 						c.SendControlMessage(remoteSteamID, protocol.ActionNackIP, msg.IP)
+						c.resolveJoin(remoteSteamID, false)
 					}
 				case protocol.ActionAckIP:
 					log.Printf("Received ACK for IP %s from %v", utils.IntIPtoString(msg.IP), remoteSteamID)
