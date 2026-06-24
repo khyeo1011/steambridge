@@ -9,6 +9,13 @@ type StatusPayload = main.StatusPayload
 type PeerInfo = main.PeerInfo
 import { EventsOn } from '../wailsjs/wailsjs/runtime'
 
+// Modular Components
+import { Header } from '../components/Header'
+import { ConnectionCard } from '../components/ConnectionCard'
+import { FirewallCard } from '../components/FirewallCard'
+import { LobbyCard } from '../components/LobbyCard'
+import { PeersCard } from '../components/PeersCard'
+
 const app = {
   StartBridge: () => isWails() ? WailsApp.StartBridge() : mockApp.StartBridge(),
   StopBridge: () => isWails() ? WailsApp.StopBridge() : mockApp.StopBridge(),
@@ -35,10 +42,10 @@ const Home: NextPage = () => {
   const [peers, setPeers] = useState<PeerInfo[]>([])
   const [firewallEnabled, setFirewallEnabled] = useState(false)
   const [allowedPorts, setAllowedPorts] = useState<number[]>([])
-  const [portInput, setPortInput] = useState('')
   const [busy, setBusy] = useState(false)
-  const [joinInput, setJoinInput] = useState('')
   const [joinNotice, setJoinNotice] = useState('')
+  const [copiedIP, setCopiedIP] = useState(false)
+  const [copiedSteamID, setCopiedSteamID] = useState(false)
 
   const refresh = useCallback(async () => {
     const [s, p, fw, ports] = await Promise.all([
@@ -82,12 +89,9 @@ const Home: NextPage = () => {
     setBusy(false)
   }
 
-  const handleJoin = async () => {
-    const id = joinInput.trim()
-    if (!/^\d+$/.test(id)) return
-    await app.JoinLobby(id)
-    setJoinInput('')
-    setJoinNotice(`Joining ${id}…`)
+  const handleJoin = async (steamID: string) => {
+    await app.JoinLobby(steamID)
+    setJoinNotice(`Joining ${steamID}…`)
     setTimeout(() => setJoinNotice(''), 5000)
     await refresh()
   }
@@ -98,11 +102,8 @@ const Home: NextPage = () => {
     await app.ToggleFirewall(next)
   }
 
-  const handleAddPort = async () => {
-    const port = parseInt(portInput, 10)
-    if (isNaN(port) || port < 1 || port > 65535) return
+  const handleAddPort = async (port: number) => {
     await app.AddPort(port)
-    setPortInput('')
     const updated = await app.GetAllowedPorts()
     setAllowedPorts(updated)
   }
@@ -113,129 +114,59 @@ const Home: NextPage = () => {
     setAllowedPorts(updated)
   }
 
+  const handleCopy = (text: string, type: 'ip' | 'steamid') => {
+    if (!text || text === '—') return
+    navigator.clipboard.writeText(text)
+    if (type === 'ip') {
+      setCopiedIP(true)
+      setTimeout(() => setCopiedIP(false), 2000)
+    } else {
+      setCopiedSteamID(true)
+      setTimeout(() => setCopiedSteamID(false), 2000)
+    }
+  }
+
   return (
     <div className={styles.page}>
-      <Head><title>SteamBridge</title></Head>
+      <Head>
+        <title>SteamBridge</title>
+      </Head>
 
-      <header className={styles.header}>
-        <span className={styles.title}>SteamBridge</span>
-        <span className={`${styles.badge} ${status.running ? styles.badgeOn : styles.badgeOff}`}>
-          {status.running ? '● Running' : '○ Stopped'}
-        </span>
-      </header>
+      <Header running={status.running} />
 
-      <div className={styles.row}>
-        <div className={styles.card}>
-          <h2>Network</h2>
-          <p><strong>Local IP:</strong> {status.localIP}</p>
-          <p><strong>Steam ID:</strong> {status.steamID}</p>
-          <p><strong>Peers:</strong> {status.peerCount}</p>
-        </div>
-
-        <div className={styles.card}>
-          <h2>Controls</h2>
-          <div className={styles.btnRow}>
-            <button
-              className={styles.btn}
-              onClick={handleStart}
-              disabled={busy || status.running}
-            >
-              Start
-            </button>
-            <button
-              className={styles.btn}
-              onClick={handleStop}
-              disabled={busy || !status.running}
-            >
-              Stop
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className={styles.card}>
-        <h2>Friends</h2>
-        {joinNotice && <p className={styles.empty}>{joinNotice}</p>}
-        <div className={styles.btnRow}>
-          <button
-            className={styles.btn}
-            onClick={() => app.OpenFriendsOverlay()}
-            disabled={!status.running}
-          >
-            Join via Steam
-          </button>
-        </div>
-        <div className={styles.portAdd}>
-          <input
-            className={styles.portInput}
-            type="text"
-            inputMode="numeric"
-            placeholder="Steam ID"
-            value={joinInput}
-            onChange={e => setJoinInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleJoin() }}
+      <div className={styles.dashboard}>
+        <div className={styles.leftCol}>
+          <ConnectionCard
+            running={status.running}
+            localIP={status.localIP}
+            steamID={status.steamID}
+            peerCount={status.peerCount}
+            busy={busy}
+            onStart={handleStart}
+            onStop={handleStop}
+            onCopy={handleCopy}
+            copiedIP={copiedIP}
+            copiedSteamID={copiedSteamID}
           />
-          <button
-            className={styles.btn}
-            onClick={handleJoin}
-            disabled={!status.running}
-          >
-            Join by Steam ID
-          </button>
-        </div>
-      </div>
 
-      <div className={styles.card}>
-        <h2>Connected Peers</h2>
-        {peers.length === 0 ? (
-          <p className={styles.empty}>No peers connected</p>
-        ) : (
-          <table className={styles.table}>
-            <thead>
-              <tr><th>Steam ID</th><th>IP Address</th></tr>
-            </thead>
-            <tbody>
-              {peers.map(p => (
-                <tr key={p.steamID}>
-                  <td>{p.steamID}</td>
-                  <td>{p.ip}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className={styles.card}>
-        <h2>
-          Firewall&nbsp;
-          <button
-            className={`${styles.toggle} ${firewallEnabled ? styles.toggleOn : styles.toggleOff}`}
-            onClick={handleToggleFirewall}
-          >
-            {firewallEnabled ? 'ON' : 'OFF'}
-          </button>
-        </h2>
-        <div className={styles.portList}>
-          {allowedPorts.map(p => (
-            <span key={p} className={styles.portTag}>
-              {p}
-              <button className={styles.portRemove} onClick={() => handleRemovePort(p)}>×</button>
-            </span>
-          ))}
-        </div>
-        <div className={styles.portAdd}>
-          <input
-            className={styles.portInput}
-            type="number"
-            min={1}
-            max={65535}
-            placeholder="port"
-            value={portInput}
-            onChange={e => setPortInput(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') handleAddPort() }}
+          <FirewallCard
+            firewallEnabled={firewallEnabled}
+            allowedPorts={allowedPorts}
+            onToggleFirewall={handleToggleFirewall}
+            onAddPort={handleAddPort}
+            onRemovePort={handleRemovePort}
           />
-          <button className={styles.btn} onClick={handleAddPort}>Add Port</button>
+        </div>
+
+        <div className={styles.rightCol}>
+          <LobbyCard
+            running={status.running}
+            joinNotice={joinNotice}
+            onJoinLobby={handleJoin}
+            onOpenOverlay={() => app.OpenFriendsOverlay()}
+          />
+
+          <PeersCard peers={peers} />
         </div>
       </div>
     </div>
@@ -243,3 +174,5 @@ const Home: NextPage = () => {
 }
 
 export default Home
+
+
