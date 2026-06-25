@@ -21,6 +21,13 @@ var (
 	bridgeGetJoinRequest     func() uint64
 	bridgeSetJoinable        func(joinable bool)
 	bridgeOpenFriendsOverlay func()
+
+	// Session-gating exports — added for join confirmation (feature 2.4).
+	// Gracefully absent from older DLLs; registered via tryRegisterLibFunc below.
+	bridgeGetSessionRequest func() uint64
+	bridgeIsFriend          func(uint64) bool
+	bridgeAcceptSession     func(uint64)
+	bridgeRejectSession     func(uint64)
 )
 
 // tryRegisterLibFunc registers a DLL export but logs a warning instead of panicking
@@ -66,6 +73,15 @@ func LoadLibrary() error {
 	tryRegisterLibFunc(&bridgeGetJoinRequest, libc, "Bridge_GetJoinRequest")
 	tryRegisterLibFunc(&bridgeSetJoinable, libc, "Bridge_SetJoinable")
 	tryRegisterLibFunc(&bridgeOpenFriendsOverlay, libc, "Bridge_OpenFriendsOverlay")
+
+	bridgeGetSessionRequest = func() uint64 { return 0 }
+	bridgeIsFriend = func(_ uint64) bool { return false }
+	bridgeAcceptSession = func(_ uint64) {}
+	bridgeRejectSession = func(_ uint64) {}
+	tryRegisterLibFunc(&bridgeGetSessionRequest, libc, "Bridge_GetSessionRequest")
+	tryRegisterLibFunc(&bridgeIsFriend, libc, "Bridge_IsFriend")
+	tryRegisterLibFunc(&bridgeAcceptSession, libc, "Bridge_AcceptSession")
+	tryRegisterLibFunc(&bridgeRejectSession, libc, "Bridge_RejectSession")
 
 	return nil
 }

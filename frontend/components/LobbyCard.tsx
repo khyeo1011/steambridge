@@ -1,13 +1,14 @@
 import React, { useState } from 'react'
 import styles from '../pages/index.module.css'
 
-type ConnectionState = 'pending' | 'connected' | 'failed'
+type ConnectionState = 'pending' | 'awaiting' | 'connected' | 'failed'
 
 interface LobbyCardProps {
   running: boolean
   connections: Record<string, ConnectionState>
   onJoinLobby: (steamID: string) => Promise<void>
   onOpenOverlay: () => void
+  onRespond: (steamID: string, accept: boolean) => void
 }
 
 export const LobbyCard: React.FC<LobbyCardProps> = ({
@@ -15,6 +16,7 @@ export const LobbyCard: React.FC<LobbyCardProps> = ({
   connections,
   onJoinLobby,
   onOpenOverlay,
+  onRespond,
 }) => {
   const [joinInput, setJoinInput] = useState('')
 
@@ -27,6 +29,7 @@ export const LobbyCard: React.FC<LobbyCardProps> = ({
 
   const badgeClass = (state: ConnectionState) =>
     state === 'pending' ? styles.statusPending :
+    state === 'awaiting' ? styles.statusPending :
     state === 'connected' ? styles.statusConnected :
     styles.statusFailed
 
@@ -79,7 +82,22 @@ export const LobbyCard: React.FC<LobbyCardProps> = ({
             {entries.map(([steamID, state]) => (
               <li key={steamID} className={styles.connectionRow}>
                 <span className={styles.connectionSteamID}>{steamID}</span>
-                <span className={badgeClass(state)}>{state}</span>
+                {state === 'awaiting' ? (
+                  <>
+                    <button
+                      className={`${styles.btn} ${styles.btnPrimary}`}
+                      style={{ padding: '0.1rem 0.5rem', fontSize: '0.75rem' }}
+                      onClick={() => onRespond(steamID, true)}
+                    >Accept</button>
+                    <button
+                      className={`${styles.btn} ${styles.btnSecondary}`}
+                      style={{ padding: '0.1rem 0.5rem', fontSize: '0.75rem' }}
+                      onClick={() => onRespond(steamID, false)}
+                    >Reject</button>
+                  </>
+                ) : (
+                  <span className={badgeClass(state)}>{state}</span>
+                )}
               </li>
             ))}
           </ul>

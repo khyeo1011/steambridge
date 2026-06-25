@@ -51,6 +51,11 @@ func (a *App) startup(ctx context.Context) {
 		}
 		runtime.EventsEmit(a.ctx, "joinResult", fmt.Sprintf("%d", id), state)
 	})
+	// Emitted on the host when a non-friend requests a P2P session.
+	// The GUI renders Accept/Reject and calls RespondToJoin with the decision.
+	a.facade.SetJoinConfirmHandler(func(id uint64) {
+		runtime.EventsEmit(a.ctx, "joinConfirmRequest", fmt.Sprintf("%d", id))
+	})
 }
 
 func (a *App) domReady(ctx context.Context) {
@@ -144,4 +149,14 @@ func (a *App) JoinLobby(steamID string) error {
 
 func (a *App) OpenFriendsOverlay() {
 	runtime.BrowserOpenURL(a.ctx, "steam://open/friends")
+}
+
+// RespondToJoin forwards the host's accept/reject decision for a pending session request.
+// steamID must be passed as a string to avoid JS float64 precision loss.
+func (a *App) RespondToJoin(steamID string, accept bool) error {
+	id, err := strconv.ParseUint(steamID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid Steam ID %q: %w", steamID, err)
+	}
+	return a.facade.RespondToJoinRequest(id, accept)
 }

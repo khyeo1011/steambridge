@@ -18,6 +18,8 @@ export function OpenFriendsOverlay():Promise<void>;
 
 export function RemovePort(arg1:number):Promise<void>;
 
+export function RespondToJoin(arg1:string,arg2:boolean):Promise<void>;
+
 export function StartBridge():Promise<void>;
 
 export function StopBridge():Promise<void>;

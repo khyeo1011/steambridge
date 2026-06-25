@@ -34,6 +34,10 @@ export function RemovePort(arg1) {
   return window['go']['main']['App']['RemovePort'](arg1);
 }
 
+export function RespondToJoin(arg1, arg2) {
+  return window['go']['main']['App']['RespondToJoin'](arg1, arg2);
+}
+
 export function StartBridge() {
   return window['go']['main']['App']['StartBridge']();
 }

@@ -33,6 +33,7 @@ type Facade struct {
 	running         atomic.Bool
 	onJoinRequest   func(uint64)
 	onJoinResult    func(uint64, bool)
+	onJoinConfirm   func(uint64)
 }
 
 // SetJoinHandler registers a callback invoked when a join is initiated. Must be
@@ -45,6 +46,12 @@ func (f *Facade) SetJoinHandler(fn func(uint64)) {
 // Must be called before Start.
 func (f *Facade) SetJoinResultHandler(fn func(uint64, bool)) {
 	f.onJoinResult = fn
+}
+
+// SetJoinConfirmHandler registers a callback invoked on the host when a non-friend
+// requests a P2P session. Must be called before Start.
+func (f *Facade) SetJoinConfirmHandler(fn func(uint64)) {
+	f.onJoinConfirm = fn
 }
 
 func NewFacade(config Config) *Facade {
@@ -83,6 +90,7 @@ func (f *Facade) Start(ctx context.Context) error {
 	f.client = client
 	f.client.SetJoinHandler(f.onJoinRequest)
 	f.client.SetJoinResultHandler(f.onJoinResult)
+	f.client.SetJoinConfirmHandler(f.onJoinConfirm)
 	f.client.SetJoinable(true)
 
 	if f.bootstrapPeerID != 0 {
@@ -143,6 +151,15 @@ func (f *Facade) Join(host uint64) error {
 		return fmt.Errorf("bridge not running")
 	}
 	f.client.Join(host)
+	return nil
+}
+
+// RespondToJoinRequest forwards the host's accept/reject decision to the client.
+func (f *Facade) RespondToJoinRequest(host uint64, accept bool) error {
+	if !f.running.Load() {
+		return fmt.Errorf("bridge not running")
+	}
+	f.client.RespondToJoinRequest(host, accept)
 	return nil
 }
 

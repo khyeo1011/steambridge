@@ -27,3 +27,8 @@ BRIDGE_EXPORT uint64_t Bridge_GetJoinRequest();
 BRIDGE_EXPORT void Bridge_SetJoinable(bool joinable);
 
 BRIDGE_EXPORT void Bridge_OpenFriendsOverlay();
+
+BRIDGE_EXPORT uint64_t Bridge_GetSessionRequest();
+BRIDGE_EXPORT bool Bridge_IsFriend(uint64_t steamId);
+BRIDGE_EXPORT void Bridge_AcceptSession(uint64_t steamId);
+BRIDGE_EXPORT void Bridge_RejectSession(uint64_t steamId);

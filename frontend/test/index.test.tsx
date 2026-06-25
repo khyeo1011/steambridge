@@ -1,10 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+﻿import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, act, waitFor, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import Home from './index'
+import Home from '../pages/index'
 import { resetMock } from '../lib/mock'
 
-// Mock Wails-only modules — never actually called since isWails() is false
+// Mock Wails-only modules â€” never actually called since isWails() is false
 // in jsdom (window.go is absent).
 vi.mock('../wailsjs/wailsjs/go/main/App', () => ({
   StartBridge: vi.fn(),
@@ -18,6 +18,7 @@ vi.mock('../wailsjs/wailsjs/go/main/App', () => ({
   ToggleFirewall: vi.fn(),
   JoinLobby: vi.fn(),
   OpenFriendsOverlay: vi.fn(),
+  RespondToJoin: vi.fn(),
 }))
 
 vi.mock('../wailsjs/wailsjs/runtime', () => ({
@@ -29,7 +30,7 @@ vi.mock('next/head', () => ({
 }))
 
 // Flush pending promise callbacks and React state updates.
-// Works without fake timers — uses a real 0ms timeout to yield to the microtask queue.
+// Works without fake timers â€” uses a real 0ms timeout to yield to the microtask queue.
 const flushPromises = () => act(async () => {
   await new Promise<void>(resolve => setTimeout(resolve, 0))
 })
@@ -55,7 +56,7 @@ describe('Dashboard - initial state', () => {
   })
 })
 
-describe('Dashboard - start → running transition', () => {
+describe('Dashboard - start â†’ running transition', () => {
   it('shows local IP and Stop Bridge button after starting', async () => {
     await renderHome()
     await act(async () => {
@@ -123,3 +124,4 @@ describe('Dashboard - manual join flow', () => {
     )
   }, 5000)
 })
+

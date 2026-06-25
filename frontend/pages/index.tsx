@@ -28,6 +28,7 @@ const app = {
   ToggleFirewall: (e: boolean) => isWails() ? WailsApp.ToggleFirewall(e) : mockApp.ToggleFirewall(e),
   JoinLobby: (id: string) => isWails() ? WailsApp.JoinLobby(id) : mockApp.JoinLobby(id),
   OpenFriendsOverlay: () => isWails() ? WailsApp.OpenFriendsOverlay() : mockApp.OpenFriendsOverlay(),
+  RespondToJoin: (id: string, accept: boolean) => isWails() ? WailsApp.RespondToJoin(id, accept) : mockApp.RespondToJoin(id, accept),
 }
 
 const defaultStatus: StatusPayload = {
@@ -43,7 +44,7 @@ const Home: NextPage = () => {
   const [firewallEnabled, setFirewallEnabled] = useState(false)
   const [allowedPorts, setAllowedPorts] = useState<number[]>([])
   const [busy, setBusy] = useState(false)
-  const [connections, setConnections] = useState<Record<string, 'pending' | 'connected' | 'failed'>>({})
+  const [connections, setConnections] = useState<Record<string, 'pending' | 'awaiting' | 'connected' | 'failed'>>({})
   const [copiedIP, setCopiedIP] = useState(false)
   const [copiedSteamID, setCopiedSteamID] = useState(false)
 
@@ -85,9 +86,18 @@ const Home: NextPage = () => {
         [steamID]: state
       }))
     })
+
+    const unsubscribeConfirm = EventsOn('joinConfirmRequest', (steamID: string) => {
+      setConnections(connections => ({
+        ...connections,
+        [steamID]: 'awaiting'
+      }))
+    })
+
     return () => {
       if (unsubscribeRequest) unsubscribeRequest();
       if (unsubscribeResult) unsubscribeResult();
+      unsubscribeConfirm();
     }
   }, [])
 
@@ -103,6 +113,14 @@ const Home: NextPage = () => {
     await app.StopBridge()
     await refresh()
     setBusy(false)
+  }
+
+  const handleRespond = async (steamID: string, accept: boolean) => {
+    await app.RespondToJoin(steamID, accept)
+    setConnections(prev => ({
+      ...prev,
+      [steamID]: accept ? 'connected' : 'failed'
+    }))
   }
 
   const handleJoin = async (steamID: string) => {
@@ -183,6 +201,7 @@ const Home: NextPage = () => {
             connections={connections}
             onJoinLobby={handleJoin}
             onOpenOverlay={() => app.OpenFriendsOverlay()}
+            onRespond={handleRespond}
           />
 
           <PeersCard peers={peers} />

@@ -32,6 +32,7 @@ export const mockApp = {
 
   JoinLobby: async (_steamID: string): Promise<void> => {},
   OpenFriendsOverlay: async (): Promise<void> => {},
+  RespondToJoin: async (_steamID: string, _accept: boolean): Promise<void> => {},
 }
 
 // Returns true when running inside the Wails runtime

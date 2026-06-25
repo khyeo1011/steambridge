@@ -8,5 +8,6 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./test/setup.ts'],
     css: true,
+    exclude: ['.next/**', 'node_modules/**'],
   },
 })

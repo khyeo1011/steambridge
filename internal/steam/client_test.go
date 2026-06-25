@@ -55,6 +55,10 @@ func newTestClient(t *testing.T) (*Client, *fakeRouter, *[][]byte) {
 		return true
 	}
 	bridgeReceive = func(_ *byte, _ int, _ *uint64) int32 { return 0 }
+	bridgeGetSessionRequest = func() uint64 { return 0 }
+	bridgeIsFriend = func(_ uint64) bool { return false }
+	bridgeAcceptSession = func(_ uint64) {}
+	bridgeRejectSession = func(_ uint64) {}
 
 	fr := &fakeRouter{}
 	c := &Client{
@@ -79,6 +83,18 @@ func makeControlFrame(action uint8, ipAddr uint32) []byte {
 // makeDataFrame wraps a payload as a data packet.
 func makeDataFrame(payload []byte) []byte {
 	return append([]byte{protocol.PacketTypeData}, payload...)
+}
+
+// feedSessionRequest makes bridgeGetSessionRequest return id once, then 0.
+func feedSessionRequest(id uint64) {
+	delivered := false
+	bridgeGetSessionRequest = func() uint64 {
+		if delivered {
+			return 0
+		}
+		delivered = true
+		return id
+	}
 }
 
 // feedPacket replaces bridgeReceive so it returns pkt once, then 0 thereafter.
@@ -223,5 +239,86 @@ func TestReadLoop_DataPacket_ForwardedToRouter(t *testing.T) {
 	defer c.peermutex.RUnlock()
 	if !c.steamIDs[42] {
 		t.Error("data sender 42 not recorded as peer")
+	}
+}
+
+// ── Session-request gating ────────────────────────────────────────────────────
+
+func TestReadLoop_SessionRequest_Friend_AutoAccepts(t *testing.T) {
+	c, _, _ := newTestClient(t)
+	var acceptedID uint64
+	bridgeIsFriend = func(id uint64) bool { return id == 42 }
+	bridgeAcceptSession = func(id uint64) { acceptedID = id }
+	feedSessionRequest(42)
+
+	var confirmFired bool
+	c.SetJoinConfirmHandler(func(_ uint64) { confirmFired = true })
+
+	runReadLoopOnce(c)
+
+	if acceptedID != 42 {
+		t.Errorf("bridgeAcceptSession: got %d, want 42", acceptedID)
+	}
+	if confirmFired {
+		t.Error("onJoinConfirm must not fire for a friend")
+	}
+	c.peermutex.RLock()
+	defer c.peermutex.RUnlock()
+	if !c.steamIDs[42] {
+		t.Error("friend 42 should be added as peer after auto-accept")
+	}
+}
+
+func TestReadLoop_SessionRequest_Stranger_PromptHost(t *testing.T) {
+	c, _, _ := newTestClient(t)
+	var acceptedID uint64
+	bridgeIsFriend = func(_ uint64) bool { return false }
+	bridgeAcceptSession = func(id uint64) { acceptedID = id }
+	feedSessionRequest(77)
+
+	var confirmID uint64
+	c.SetJoinConfirmHandler(func(id uint64) { confirmID = id })
+
+	runReadLoopOnce(c)
+
+	if confirmID != 77 {
+		t.Errorf("onJoinConfirm: got %d, want 77", confirmID)
+	}
+	if acceptedID != 0 {
+		t.Errorf("bridgeAcceptSession must not be called for a stranger, got %d", acceptedID)
+	}
+}
+
+func TestRespondToJoinRequest_Accept(t *testing.T) {
+	c, _, _ := newTestClient(t)
+	var acceptedID uint64
+	bridgeAcceptSession = func(id uint64) { acceptedID = id }
+
+	c.RespondToJoinRequest(55, true)
+
+	if acceptedID != 55 {
+		t.Errorf("bridgeAcceptSession: got %d, want 55", acceptedID)
+	}
+	c.peermutex.RLock()
+	defer c.peermutex.RUnlock()
+	if !c.steamIDs[55] {
+		t.Error("accepted peer 55 should be added as peer")
+	}
+}
+
+func TestRespondToJoinRequest_Reject(t *testing.T) {
+	c, _, _ := newTestClient(t)
+	var rejectedID uint64
+	bridgeRejectSession = func(id uint64) { rejectedID = id }
+
+	c.RespondToJoinRequest(55, false)
+
+	if rejectedID != 55 {
+		t.Errorf("bridgeRejectSession: got %d, want 55", rejectedID)
+	}
+	c.peermutex.RLock()
+	defer c.peermutex.RUnlock()
+	if c.steamIDs[55] {
+		t.Error("rejected peer 55 must not be added as peer")
 	}
 }

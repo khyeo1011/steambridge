@@ -8,9 +8,10 @@ const noop = () => Promise.resolve()
 function renderCard(
   props: Partial<{
     running: boolean
-    connections: Record<string, 'pending' | 'connected' | 'failed'>
+    connections: Record<string, 'pending' | 'awaiting' | 'connected' | 'failed'>
     onJoinLobby: (id: string) => Promise<void>
     onOpenOverlay: () => void
+    onRespond: (steamID: string, accept: boolean) => void
   }> = {}
 ) {
   const defaults = {
@@ -18,6 +19,7 @@ function renderCard(
     connections: {},
     onJoinLobby: vi.fn().mockResolvedValue(undefined),
     onOpenOverlay: vi.fn(),
+    onRespond: vi.fn(),
   }
   const merged = { ...defaults, ...props }
   render(<LobbyCard {...merged} />)
@@ -105,6 +107,16 @@ describe('LobbyCard - connection status badges', () => {
     expect(screen.getByText('111')).toBeInTheDocument()
     expect(screen.getByText('222')).toBeInTheDocument()
     expect(screen.getByText('333')).toBeInTheDocument()
+  })
+
+  it('renders Accept/Reject buttons for awaiting connections', async () => {
+    const onRespond = vi.fn()
+    renderCard({ connections: { '444': 'awaiting' }, onRespond })
+    expect(screen.getByText('444')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /accept/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /reject/i })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /accept/i }))
+    expect(onRespond).toHaveBeenCalledWith('444', true)
   })
 
   it('renders nothing when connections is empty', () => {
