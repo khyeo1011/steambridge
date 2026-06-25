@@ -1,9 +1,15 @@
-#! /bin/bash
+#!/bin/bash
+set -e
+cd "$(dirname "$0")/.."
 
-echo -e "Start running the script..."
-cd ../
+echo "Building cbridge..."
+(cd cbridge && bash build.sh)
 
-echo -e "Start building the app..."
-wails build --clean
+echo "Building Wails app..."
+wails build --clean -tags webkit2_41
 
-echo -e "End running the script!"
+echo "Copying runtime libs to build/bin..."
+cp -f libsteam_bridge.so build/bin/
+cp -f libsteam_api.so build/bin/
+
+echo "Done."

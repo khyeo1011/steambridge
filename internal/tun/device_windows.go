@@ -5,12 +5,46 @@ package tun
 import (
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"steambridge/internal/utils"
 
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
 )
+
+func init() {
+	// wintun loads its DLL with LoadLibraryEx(APPLICATION_DIR|SYSTEM32), which
+	// only looks in the exe directory and System32. In wails dev mode the exe is
+	// in a temp dir, so wintun.dll can't be found. SetDllDirectory redirects
+	// LOAD_LIBRARY_SEARCH_APPLICATION_DIR to the given path, fixing the search.
+	for _, dir := range []string{exeDir(), cwdDir()} {
+		if dir == "" {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(dir, "wintun.dll")); err == nil {
+			windows.SetDllDirectory(dir) //nolint:errcheck
+			return
+		}
+	}
+}
+
+func exeDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return filepath.Dir(exe)
+}
+
+func cwdDir() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return wd
+}
 
 type Device struct {
 	adapter *wintun.Adapter

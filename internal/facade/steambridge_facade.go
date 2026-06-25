@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 	"steambridge/internal/protocol"
 	"steambridge/internal/router"
 	"steambridge/internal/steam"
 	"steambridge/internal/tun"
 	"sync"
+	"sync/atomic"
 )
 
 type Config struct {
@@ -28,6 +30,28 @@ type Facade struct {
 	cancelFunc      context.CancelFunc
 	bootstrapPeerID uint64
 	readyChan       chan struct{}
+	running         atomic.Bool
+	onJoinRequest   func(uint64)
+	onJoinResult    func(uint64, bool)
+	onJoinConfirm   func(uint64)
+}
+
+// SetJoinHandler registers a callback invoked when a join is initiated. Must be
+// called before Start so it can be wired to the client at creation.
+func (f *Facade) SetJoinHandler(fn func(uint64)) {
+	f.onJoinRequest = fn
+}
+
+// SetJoinResultHandler registers a callback invoked once per join with the outcome.
+// Must be called before Start.
+func (f *Facade) SetJoinResultHandler(fn func(uint64, bool)) {
+	f.onJoinResult = fn
+}
+
+// SetJoinConfirmHandler registers a callback invoked on the host when a non-friend
+// requests a P2P session. Must be called before Start.
+func (f *Facade) SetJoinConfirmHandler(fn func(uint64)) {
+	f.onJoinConfirm = fn
 }
 
 func NewFacade(config Config) *Facade {
@@ -43,10 +67,15 @@ func NewFacade(config Config) *Facade {
 }
 
 func (f *Facade) Start(ctx context.Context) error {
-	log.Printf("Setting up TAP interface: %s\n", f.ifaceName)
+	if f.running.Load() {
+		return nil
+	}
+	log.Printf("Setting up TUN interface: %s\n", f.ifaceName)
 	tunDev, err := tun.NewTUN(f.ifaceName, f.ifaceID)
 	if err != nil {
-		return fmt.Errorf("could not create TAP device: %w", err)
+		wd, _ := os.Getwd()
+		log.Printf("CWD: %s", wd)
+		return fmt.Errorf("could not create TUN device: %w", err)
 	}
 	f.tunDev = tunDev
 
@@ -59,6 +88,10 @@ func (f *Facade) Start(ctx context.Context) error {
 		return fmt.Errorf("steam client init: %w", err)
 	}
 	f.client = client
+	f.client.SetJoinHandler(f.onJoinRequest)
+	f.client.SetJoinResultHandler(f.onJoinResult)
+	f.client.SetJoinConfirmHandler(f.onJoinConfirm)
+	f.client.SetJoinable(true)
 
 	if f.bootstrapPeerID != 0 {
 		f.client.AddPeer(f.bootstrapPeerID)
@@ -66,6 +99,7 @@ func (f *Facade) Start(ctx context.Context) error {
 
 	f.router.SetSteamSender(f.client)
 	log.Printf("SteamBridge is live on interface '%s'! Waiting for shutdown.\n", f.ifaceName)
+	f.running.Store(true)
 	engineCtx, cancel := context.WithCancel(ctx)
 	f.cancelFunc = cancel
 	f.wg.Add(2)
@@ -88,6 +122,9 @@ func (f *Facade) Start(ctx context.Context) error {
 }
 
 func (f *Facade) Stop() error {
+	if f.client != nil {
+		f.client.SetJoinable(false)
+	}
 	if f.bootstrapPeerID != 0 {
 		f.client.SendControlMessage(f.bootstrapPeerID, protocol.ActionNackIP, 0)
 	}
@@ -104,8 +141,32 @@ func (f *Facade) Stop() error {
 	}
 
 	f.wg.Wait()
+	f.running.Store(false)
 
 	return nil
+}
+
+func (f *Facade) Join(host uint64) error {
+	if !f.running.Load() {
+		return fmt.Errorf("bridge not running")
+	}
+	f.client.Join(host)
+	return nil
+}
+
+// RespondToJoinRequest forwards the host's accept/reject decision to the client.
+func (f *Facade) RespondToJoinRequest(host uint64, accept bool) error {
+	if !f.running.Load() {
+		return fmt.Errorf("bridge not running")
+	}
+	f.client.RespondToJoinRequest(host, accept)
+	return nil
+}
+
+func (f *Facade) OpenFriendsOverlay() {
+	if f.client != nil {
+		f.client.OpenFriendsOverlay()
+	}
 }
 
 func (f *Facade) AddPort(port uint16) {
@@ -122,4 +183,36 @@ func (f *Facade) SetFirewall(enabled bool) {
 
 func (f *Facade) GetLocalSteamID() uint64 {
 	return f.client.GetLocalSteamID()
+}
+
+func (f *Facade) IsRunning() bool {
+	return f.running.Load()
+}
+
+func (f *Facade) GetLocalIP() uint32 {
+	if f.client == nil {
+		return 0
+	}
+	return f.client.GetLocalIP()
+}
+
+func (f *Facade) GetPeerTable() map[uint32]uint64 {
+	if f.router == nil {
+		return nil
+	}
+	return f.router.GetPeers()
+}
+
+func (f *Facade) GetFirewallState() bool {
+	if f.router == nil {
+		return false
+	}
+	return f.router.GetFirewallState()
+}
+
+func (f *Facade) GetAllowedPorts() []uint16 {
+	if f.router == nil {
+		return nil
+	}
+	return f.router.GetAllowedPorts()
 }

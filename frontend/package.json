@@ -8,19 +8,30 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "export": "next build && next export"
+    "export": "next build",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
-    "@types/node": "18.15.11",
+    "@types/node": "^20.19.0",
     "@types/react": "18.0.33",
     "@types/react-dom": "18.0.11",
     "eslint": "8.37.0",
     "eslint-config-next": "13.3.0",
-    "next": "13.3.0",
+    "next": "^16.2.7",
     "react": "18.2.0",
-    "react-dom": "18.2.0",
-    "typescript": "5.0.3"
+    "react-dom": "18.2.0"
   },
   "keywords": [],
-  "author": "Sebastian Yeo"
+  "author": "Sebastian Yeo",
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@vitejs/plugin-react": "^6.0.3",
+    "jsdom": "^29.1.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
 }

@@ -5,9 +5,22 @@ import (
 	"fmt"
 	"steambridge/internal/facade"
 	"steambridge/internal/utils"
+	"strconv"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+type StatusPayload struct {
+	Running   bool   `json:"running"`
+	LocalIP   string `json:"localIP"`
+	SteamID   string `json:"steamID"`
+	PeerCount int    `json:"peerCount"`
+}
+
+type PeerInfo struct {
+	SteamID string `json:"steamID"`
+	IP      string `json:"ip"`
+}
 
 // App struct
 type App struct {
@@ -21,17 +34,32 @@ func NewApp() *App {
 		IfaceID:         "tap0901",
 		BootstrapPeerID: 0,
 	}
-	facade := facade.NewFacade(config)
-	return &App{facade: facade}
+	f := facade.NewFacade(config)
+	return &App{facade: f}
 }
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	// SteamID emitted as a string to avoid JS float64 precision loss.
+	a.facade.SetJoinHandler(func(id uint64) {
+		runtime.EventsEmit(a.ctx, "joinRequest", fmt.Sprintf("%d", id))
+	})
+	a.facade.SetJoinResultHandler(func(id uint64, connected bool) {
+		state := "failed"
+		if connected {
+			state = "connected"
+		}
+		runtime.EventsEmit(a.ctx, "joinResult", fmt.Sprintf("%d", id), state)
+	})
+	// Emitted on the host when a non-friend requests a P2P session.
+	// The GUI renders Accept/Reject and calls RespondToJoin with the decision.
+	a.facade.SetJoinConfirmHandler(func(id uint64) {
+		runtime.EventsEmit(a.ctx, "joinConfirmRequest", fmt.Sprintf("%d", id))
+	})
 }
 
 func (a *App) domReady(ctx context.Context) {
 	runtime.LogDebug(ctx, "Wails UI booted. Engine standing by")
-	a.InitNetwork()
 }
 
 func (a *App) beforeClose(ctx context.Context) (prevent bool) {
@@ -40,25 +68,95 @@ func (a *App) beforeClose(ctx context.Context) (prevent bool) {
 
 func (a *App) shutdown(ctx context.Context) {
 	runtime.LogDebug(ctx, "Shutdown signal received from GUI. Tearing down TAP interface...")
-
 	a.facade.Stop()
 }
 
-func (a *App) Greet(name string) string {
-	return fmt.Sprintf("Hello %s, It's show time!", name)
-}
-
-func (a *App) InitNetwork() {
-	runtime.LogDebug(a.ctx, "Initializing TAP interface")
+func (a *App) StartBridge() error {
+	runtime.LogDebug(a.ctx, "Starting bridge")
 	if err := a.facade.Start(a.ctx); err != nil {
 		runtime.LogErrorf(a.ctx, "Failed to start network: %v", err)
-		return
+		return err
 	}
-	x, y := utils.SteamIDToTapCoords(a.facade.GetLocalSteamID())
-	runtime.LogDebugf(a.ctx, "Initializing tap interface IP: 10.209.%d.%d", x, y)
+	return nil
 }
 
-func (a *App) JoinLobby(steamID uint64) error {
-	runtime.LogDebugf(a.ctx, "Attempting to join Steam ID %d(0 means hosting)", steamID)
-	return fmt.Errorf("not implemented")
+func (a *App) StopBridge() error {
+	runtime.LogDebug(a.ctx, "Stopping bridge")
+	return a.facade.Stop()
+}
+
+func (a *App) GetStatus() StatusPayload {
+	peerTable := a.facade.GetPeerTable()
+	localIP := a.facade.GetLocalIP()
+	steamID := uint64(0)
+	if a.facade.IsRunning() {
+		steamID = a.facade.GetLocalSteamID()
+	}
+	return StatusPayload{
+		Running:   a.facade.IsRunning(),
+		LocalIP:   utils.IntIPtoString(localIP),
+		SteamID:   fmt.Sprintf("%d", steamID),
+		PeerCount: len(peerTable),
+	}
+}
+
+func (a *App) GetPeers() []PeerInfo {
+	table := a.facade.GetPeerTable()
+	peers := make([]PeerInfo, 0, len(table))
+	for ip, steamID := range table {
+		peers = append(peers, PeerInfo{
+			SteamID: fmt.Sprintf("%d", steamID),
+			IP:      utils.IntIPtoString(ip),
+		})
+	}
+	return peers
+}
+
+func (a *App) GetFirewallState() bool {
+	return a.facade.GetFirewallState()
+}
+
+func (a *App) GetAllowedPorts() []uint16 {
+	ports := a.facade.GetAllowedPorts()
+	if ports == nil {
+		return []uint16{}
+	}
+	return ports
+}
+
+func (a *App) AddPort(port uint16) {
+	a.facade.AddPort(port)
+}
+
+func (a *App) RemovePort(port uint16) {
+	a.facade.RemovePort(port)
+}
+
+func (a *App) ToggleFirewall(enabled bool) {
+	a.facade.SetFirewall(enabled)
+}
+
+// JoinLobby initiates a join with a host by SteamID. The ID is passed as a
+// string because 17-digit SteamIDs exceed JS's safe integer range.
+func (a *App) JoinLobby(steamID string) error {
+	id, err := strconv.ParseUint(steamID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid Steam ID %q: %w", steamID, err)
+	}
+	runtime.LogDebugf(a.ctx, "Attempting to join Steam ID %d", id)
+	return a.facade.Join(id)
+}
+
+func (a *App) OpenFriendsOverlay() {
+	runtime.BrowserOpenURL(a.ctx, "steam://open/friends")
+}
+
+// RespondToJoin forwards the host's accept/reject decision for a pending session request.
+// steamID must be passed as a string to avoid JS float64 precision loss.
+func (a *App) RespondToJoin(steamID string, accept bool) error {
+	id, err := strconv.ParseUint(steamID, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid Steam ID %q: %w", steamID, err)
+	}
+	return a.facade.RespondToJoinRequest(id, accept)
 }
