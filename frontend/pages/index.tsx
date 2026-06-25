@@ -81,10 +81,15 @@ const Home: NextPage = () => {
     })
 
     unsubscribeResult = EventsOn('joinResult', (steamID: string, state: 'connected' | 'failed') => {
-      setConnections(connections => ({
-        ...connections,
-        [steamID]: state
-      }))
+      setConnections(connections => {
+        const next = { ...connections }
+        if (state === 'connected') {
+          delete next[steamID]  // peer moves to Connected Peers card once data flows
+        } else {
+          next[steamID] = state
+        }
+        return next
+      })
     })
 
     const unsubscribeConfirm = EventsOn('joinConfirmRequest', (steamID: string) => {
@@ -111,16 +116,22 @@ const Home: NextPage = () => {
   const handleStop = async () => {
     setBusy(true)
     await app.StopBridge()
+    setConnections({})
     await refresh()
     setBusy(false)
   }
 
   const handleRespond = async (steamID: string, accept: boolean) => {
     await app.RespondToJoin(steamID, accept)
-    setConnections(prev => ({
-      ...prev,
-      [steamID]: accept ? 'connected' : 'failed'
-    }))
+    setConnections(prev => {
+      const next = { ...prev }
+      if (accept) {
+        delete next[steamID]  // peer moves to Connected Peers card once data flows
+      } else {
+        next[steamID] = 'failed'
+      }
+      return next
+    })
   }
 
   const handleJoin = async (steamID: string) => {

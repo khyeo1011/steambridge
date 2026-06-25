@@ -47,6 +47,13 @@ BRIDGE_EXPORT bool Bridge_Init() {
 }
 
 BRIDGE_EXPORT void Bridge_Shutdown() {
+    // Clear queued session requests so stale entries don't survive a bridge restart
+    // and bypass the confirmation gate on the next Start().
+    {
+        std::lock_guard<std::mutex> lock(g_sessionMutex);
+        while (!g_sessionRequests.empty()) g_sessionRequests.pop();
+    }
+    g_pendingJoin.store(0);
     SteamAPI_Shutdown();
 }
 
