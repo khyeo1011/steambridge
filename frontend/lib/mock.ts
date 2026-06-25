@@ -3,6 +3,11 @@ import { main } from '../wailsjs/wailsjs/go/models'
 // Simulated state for browser-only development (no Go backend)
 let mockRunning = false
 
+// reset clears all mock state. Call this in test beforeEach to ensure isolation.
+export function resetMock() {
+  mockRunning = false
+}
+
 export const mockApp = {
   StartBridge: async (): Promise<void> => { mockRunning = true },
   StopBridge: async (): Promise<void> => { mockRunning = false },
