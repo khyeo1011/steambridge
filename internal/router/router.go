@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"encoding/binary"
+	"io"
 	"steambridge/internal/dpi"
 	"steambridge/internal/protocol"
 	"steambridge/internal/tun"
@@ -64,13 +65,16 @@ func (r *Router) HandleIngress(senderID uint64, packet []byte) {
 	r.tunDev.Write(packet)
 }
 
-func (r *Router) StartEgress(ctx context.Context) {
+func (r *Router) StartEgress(ctx context.Context) error {
 	packet := make([]byte, 2048)
 
 	for {
 		n, err := r.tunDev.Read(packet[1:])
 		if err != nil {
-			return
+			if err == io.EOF {
+				return nil
+			}
+			return err
 		}
 		if !dpi.IsValidLan(packet[1:]) {
 			continue
@@ -101,9 +105,7 @@ func (r *Router) StartEgress(ctx context.Context) {
 				r.steam.SendToAll(payload)
 			}
 		}
-
 	}
-
 }
 
 func (r *Router) SetSteamSender(s SteamSender) {

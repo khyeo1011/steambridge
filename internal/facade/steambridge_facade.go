@@ -20,20 +20,22 @@ type Config struct {
 }
 
 type Facade struct {
-	ifaceName       string
-	ifaceID         string
-	tunDev          tun.TunInterface
-	router          *router.Router
-	client          *steam.Client
-	table           *router.Table
-	wg              sync.WaitGroup
-	cancelFunc      context.CancelFunc
-	bootstrapPeerID uint64
-	readyChan       chan struct{}
-	running         atomic.Bool
-	onJoinRequest   func(uint64)
-	onJoinResult    func(uint64, bool)
-	onJoinConfirm   func(uint64)
+	ifaceName        string
+	ifaceID          string
+	tunDev           tun.TunInterface
+	router           *router.Router
+	client           *steam.Client
+	table            *router.Table
+	wg               sync.WaitGroup
+	cancelFunc       context.CancelFunc
+	bootstrapPeerID  uint64
+	readyChan        chan struct{}
+	running          atomic.Bool
+	onJoinRequest    func(uint64)
+	onJoinResult     func(uint64, bool)
+	onJoinConfirm    func(uint64)
+	onDisconnect     func()
+	abnormalExitOnce sync.Once
 }
 
 // SetJoinHandler registers a callback invoked when a join is initiated. Must be
@@ -52,6 +54,13 @@ func (f *Facade) SetJoinResultHandler(fn func(uint64, bool)) {
 // requests a P2P session. Must be called before Start.
 func (f *Facade) SetJoinConfirmHandler(fn func(uint64)) {
 	f.onJoinConfirm = fn
+}
+
+// SetDisconnectHandler registers a callback invoked once if an engine goroutine
+// exits abnormally (e.g. Steam P2P session dropped). The bridge is torn down
+// automatically; the callback is a signal to update UI or log the event.
+func (f *Facade) SetDisconnectHandler(fn func()) {
+	f.onDisconnect = fn
 }
 
 func NewFacade(config Config) *Facade {
@@ -100,17 +109,34 @@ func (f *Facade) Start(ctx context.Context) error {
 	f.router.SetSteamSender(f.client)
 	log.Printf("SteamBridge is live on interface '%s'! Waiting for shutdown.\n", f.ifaceName)
 	f.running.Store(true)
+	f.abnormalExitOnce = sync.Once{} // reset for this Start/Stop cycle
 	engineCtx, cancel := context.WithCancel(ctx)
 	f.cancelFunc = cancel
 	f.wg.Add(2)
 	go func() {
 		defer f.wg.Done()
-		f.router.StartEgress(engineCtx)
+		if err := f.router.StartEgress(engineCtx); err != nil && engineCtx.Err() == nil {
+			log.Printf("egress loop exited abnormally: %v", err)
+			f.abnormalExitOnce.Do(func() {
+				if f.onDisconnect != nil {
+					f.onDisconnect()
+				}
+				go f.Stop() //nolint:errcheck
+			})
+		}
 	}()
 
 	go func() {
 		defer f.wg.Done()
-		f.client.ReadLoop(engineCtx)
+		if err := f.client.ReadLoop(engineCtx); err != nil && engineCtx.Err() == nil {
+			log.Printf("read loop exited abnormally: %v", err)
+			f.abnormalExitOnce.Do(func() {
+				if f.onDisconnect != nil {
+					f.onDisconnect()
+				}
+				go f.Stop() //nolint:errcheck
+			})
+		}
 	}()
 
 	if f.bootstrapPeerID != 0 {
@@ -122,26 +148,39 @@ func (f *Facade) Start(ctx context.Context) error {
 }
 
 func (f *Facade) Stop() error {
+	// Idempotent: only the first call does real work.
+	if !f.running.CompareAndSwap(true, false) {
+		return nil
+	}
+
 	if f.client != nil {
 		f.client.SetJoinable(false)
+		f.client.Disconnect() // tell all peers we are leaving
 	}
-	if f.bootstrapPeerID != 0 {
+	if f.bootstrapPeerID != 0 && f.client != nil {
 		f.client.SendControlMessage(f.bootstrapPeerID, protocol.ActionNackIP, 0)
 	}
+
+	// Cancel the engine context so ReadLoop exits its ctx.Done() check.
 	if f.cancelFunc != nil {
 		f.cancelFunc()
 	}
 
+	// Wake any goroutine blocked in tunDev.Read so StartEgress can return.
 	if f.tunDev != nil {
-		f.tunDev.Close()
+		f.tunDev.Unblock() //nolint:errcheck
 	}
 
+	// Wait for both engine goroutines to exit before freeing resources.
+	f.wg.Wait()
+
+	// Now safe to free — no goroutines are touching these.
+	if f.tunDev != nil {
+		f.tunDev.Close() //nolint:errcheck
+	}
 	if f.client != nil {
 		f.client.Close()
 	}
-
-	f.wg.Wait()
-	f.running.Store(false)
 
 	return nil
 }

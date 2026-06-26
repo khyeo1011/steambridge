@@ -49,6 +49,11 @@ func main() {
 	facade := facade.NewFacade(config)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
+	facade.SetDisconnectHandler(func() {
+		log.Println("Bridge disconnected abnormally; shutting down.")
+		cancel()
+	})
+
 	go func() {
 		if err := facade.Start(ctx); err != nil {
 			log.Printf("facade stopped: %s", err)

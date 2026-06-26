@@ -7,6 +7,7 @@ import (
 	"log"
 	"os/exec"
 	"steambridge/internal/utils"
+	"sync"
 
 	"github.com/songgao/water"
 	"github.com/vishvananda/netlink"
@@ -14,6 +15,7 @@ import (
 
 type Device struct {
 	*water.Interface
+	closeOnce sync.Once
 }
 
 func getWaterConfig(ifaceName string) water.Config {
@@ -47,15 +49,26 @@ func setupLink(dev *Device) error {
 }
 
 func NewTUN(ifaceName string, ifaceID string) (TunInterface, error) {
+	// Clean up a leftover interface from a prior crash so water.New doesn't fail.
+	if ifaceName != "" {
+		if link, err := netlink.LinkByName(ifaceName); err == nil {
+			if delErr := netlink.LinkDel(link); delErr != nil {
+				log.Printf("tun: pre-create cleanup of %s failed: %v", ifaceName, delErr)
+			}
+		}
+	}
+
 	config := getWaterConfig(ifaceName)
 	iface, err := water.New(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create TAP interface: %w", err)
 	}
-	if err := setupLink(&Device{iface}); err != nil {
+	dev := &Device{Interface: iface}
+	if err := setupLink(dev); err != nil {
+		dev.Interface.Close() //nolint:errcheck
 		return nil, fmt.Errorf("failed to configure link: %w", err)
 	}
-	return &Device{iface}, nil
+	return dev, nil
 }
 
 func (d *Device) Read(p []byte) (int, error) {
@@ -66,8 +79,35 @@ func (d *Device) Write(p []byte) (int, error) {
 	return d.Interface.Write(p)
 }
 
+// closeFD closes the underlying file descriptor exactly once.
+// Closing the fd causes any blocked Read to return an error immediately.
+func (d *Device) closeFD() {
+	d.closeOnce.Do(func() {
+		d.Interface.Close() //nolint:errcheck
+	})
+}
+
+// Unblock wakes any goroutine blocked in Read without removing the interface.
+// Call Close() after all goroutines have exited to also delete the link.
+func (d *Device) Unblock() error {
+	d.closeFD()
+	return nil
+}
+
+// Close closes the fd and removes the network link so a subsequent NewTUN
+// for the same interface name succeeds.
 func (d *Device) Close() error {
-	return d.Interface.Close()
+	d.closeFD()
+	link, err := netlink.LinkByName(d.Name())
+	if err != nil {
+		// Interface may already be gone; log and move on.
+		log.Printf("tun: LinkByName(%s) on close: %v", d.Name(), err)
+		return nil
+	}
+	if err := netlink.LinkDel(link); err != nil {
+		log.Printf("tun: LinkDel(%s): %v", d.Name(), err)
+	}
+	return nil
 }
 
 func (d *Device) SetIP(ip uint32) error {
