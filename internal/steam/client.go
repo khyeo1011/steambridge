@@ -19,7 +19,7 @@ import (
 type RouterInterface interface {
 	HandleIngress(senderID uint64, packet []byte)
 	SetSteamSender(s router.SteamSender)
-	StartEgress(ctx context.Context)
+	StartEgress(ctx context.Context) error
 	AddPort(port uint16)
 	RemovePort(port uint16)
 	SetFirewall(enabled bool)
@@ -166,6 +166,28 @@ func (c *Client) AddPeer(steamID uint64) {
 	c.steamIDs[steamID] = true
 }
 
+func (c *Client) removePeer(steamID uint64) {
+	c.peermutex.Lock()
+	defer c.peermutex.Unlock()
+	delete(c.steamIDs, steamID)
+}
+
+// Disconnect broadcasts ActionDisconnect to all known peers so they can clean
+// up their side. Carries the local IP so receivers can release the IPAM lease.
+func (c *Client) Disconnect() {
+	c.peermutex.RLock()
+	ids := make([]uint64, 0, len(c.steamIDs))
+	for id := range c.steamIDs {
+		ids = append(ids, id)
+	}
+	c.peermutex.RUnlock()
+
+	localIP := c.localIP.Load()
+	for _, id := range ids {
+		c.SendControlMessage(id, protocol.ActionDisconnect, localIP)
+	}
+}
+
 func (c *Client) SendToPeer(steamID uint64, frame []byte) {
 	if len(frame) == 0 {
 		return
@@ -189,14 +211,14 @@ func (c *Client) SendToAll(frame []byte) {
 	}
 }
 
-func (c *Client) ReadLoop(ctx context.Context) {
+func (c *Client) ReadLoop(ctx context.Context) error {
 	// Allocate a buffer slightly larger than standard Ethernet MTU (1500)
 	buffer := make([]byte, 2048)
 
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		default:
 			bridgeRunCallbacks()
 
@@ -228,8 +250,7 @@ func (c *Client) ReadLoop(ctx context.Context) {
 				time.Sleep(time.Millisecond) // Don't peg the CPU at 100%
 				continue
 			} else if bytesRead < 0 {
-				log.Printf("Bytes received = %d, aborting\n", bytesRead)
-				return
+				return fmt.Errorf("bridge receive returned %d: Steam P2P session dropped", bytesRead)
 			}
 			log.Printf("Steam Received %d bytes from %v", bytesRead, remoteSteamID)
 			packetCopy := make([]byte, bytesRead)
@@ -304,6 +325,13 @@ func (c *Client) ReadLoop(ctx context.Context) {
 					} else {
 						log.Printf("Peceived 0 as nack op")
 					}
+				case protocol.ActionDisconnect:
+					log.Printf("Peer %d disconnected; releasing IP %s", remoteSteamID, utils.IntIPtoString(msg.IP))
+					c.ipPool.Release(msg.IP)
+					c.removePeer(remoteSteamID)
+					// resolveJoin is a no-op if they were never in pendingJoins.
+					c.resolveJoin(remoteSteamID, false)
+
 				default:
 					// Invalid
 					log.Printf("Warning: Unknown control action '%d' from %v", msg.Action, remoteSteamID)

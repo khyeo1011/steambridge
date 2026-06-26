@@ -2,9 +2,11 @@ package router
 
 import (
 	"context"
+	"errors"
 	"io"
 	"sync"
 	"testing"
+	"time"
 )
 
 // fakeTun satisfies tun.TunInterface for tests.
@@ -16,6 +18,7 @@ type fakeTun struct {
 	readIdx  int
 	done     chan struct{} // closed to unblock a pending Read after all packets consumed
 	doneOnce sync.Once
+	readErr  error // if set, returned instead of io.EOF when packets are exhausted
 }
 
 func newFakeTun(packets ...[]byte) *fakeTun {
@@ -31,10 +34,14 @@ func (f *fakeTun) Read(p []byte) (int, error) {
 		f.mu.Unlock()
 		return n, nil
 	}
+	readErr := f.readErr
 	f.mu.Unlock()
 	// signal the test we've fed all packets, then block until closed
 	f.doneOnce.Do(func() { close(f.done) })
 	<-f.done
+	if readErr != nil {
+		return 0, readErr
+	}
 	return 0, io.EOF
 }
 
@@ -47,6 +54,7 @@ func (f *fakeTun) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+func (f *fakeTun) Unblock() error              { f.doneOnce.Do(func() { close(f.done) }); return nil }
 func (f *fakeTun) Close() error                { return nil }
 func (f *fakeTun) SetIP(_ uint32) error        { return nil }
 func (f *fakeTun) Name() string                { return "faketun0" }
@@ -268,7 +276,9 @@ func buildEgressIPv4(dstIP uint32) []byte {
 	return pkt
 }
 
-func runEgress(r *Router, pkt []byte) {
+// runEgress feeds one packet, waits for it to be consumed, cancels the ctx,
+// and returns whatever error StartEgress returned.
+func runEgress(r *Router, pkt []byte) error {
 	ft := r.tunDev.(*fakeTun)
 	ft.mu.Lock()
 	ft.packets = append(ft.packets, pkt)
@@ -278,9 +288,58 @@ func runEgress(r *Router, pkt []byte) {
 	ft.mu.Unlock()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go r.StartEgress(ctx)
+	errCh := make(chan error, 1)
+	go func() { errCh <- r.StartEgress(ctx) }()
 	<-ft.done  // all scripted packets fed
-	cancel()   // stop the loop
+	cancel()   // signal shutdown
+	return <-errCh
+}
+
+// TestStartEgress_ReturnsNilOnEOF verifies that a TUN EOF (normal close) maps to nil.
+func TestStartEgress_ReturnsNilOnEOF(t *testing.T) {
+	ft := newFakeTun()
+	r := NewRouter(ft, &fakeSteam{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() { errCh <- r.StartEgress(ctx) }()
+	<-ft.done // fakeTun blocks until unblocked
+	ft.doneOnce.Do(func() { close(ft.done) }) // trigger EOF path (already closed by done signal)
+	// Unblock via close event
+	ft.Unblock() //nolint:errcheck
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Errorf("expected nil on EOF, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("StartEgress did not return after Unblock")
+	}
+}
+
+// TestStartEgress_ReturnsErrOnReadError verifies unexpected TUN errors are propagated.
+func TestStartEgress_ReturnsErrOnReadError(t *testing.T) {
+	sentinelErr := errors.New("tun hardware failure")
+	ft := newFakeTun()
+	ft.readErr = sentinelErr
+	r := NewRouter(ft, &fakeSteam{})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	errCh := make(chan error, 1)
+	go func() { errCh <- r.StartEgress(ctx) }()
+	ft.Unblock() //nolint:errcheck
+
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, sentinelErr) {
+			t.Errorf("expected %v, got %v", sentinelErr, err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("StartEgress did not return after injected error")
+	}
 }
 
 func TestStartEgress_TableHitSendsToPeer(t *testing.T) {

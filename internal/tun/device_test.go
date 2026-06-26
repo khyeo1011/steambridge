@@ -161,3 +161,32 @@ func TestDevice_Read(t *testing.T) {
 		t.Log("Read successfully blocked (timeout reached without error)")
 	}
 }
+
+// TestDevice_Unblock verifies that calling Unblock() causes a goroutine
+// blocked in Read to return promptly (within 500 ms).
+func TestDevice_Unblock(t *testing.T) {
+	ifaceName := "tun_test_unblock"
+	dev, teardown := setupTestDevice(t, ifaceName)
+	defer teardown()
+
+	readDone := make(chan error, 1)
+	go func() {
+		buf := make([]byte, MAXMTU)
+		_, err := dev.Read(buf)
+		readDone <- err
+	}()
+
+	// Give the goroutine a moment to enter the blocking Read.
+	time.Sleep(50 * time.Millisecond)
+
+	if err := dev.Unblock(); err != nil {
+		t.Fatalf("Unblock returned error: %v", err)
+	}
+
+	select {
+	case <-readDone:
+		// Read returned — Unblock worked.
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("Read did not unblock within 500ms after Unblock()")
+	}
+}

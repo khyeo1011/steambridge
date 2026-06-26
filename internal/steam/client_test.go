@@ -27,8 +27,8 @@ func (r *fakeRouter) HandleIngress(senderID uint64, packet []byte) {
 	r.ingress = append(r.ingress, struct{ id uint64; pkt []byte }{senderID, cp})
 	r.mu.Unlock()
 }
-func (r *fakeRouter) SetSteamSender(_ router.SteamSender) {}
-func (r *fakeRouter) StartEgress(_ context.Context)        {}
+func (r *fakeRouter) SetSteamSender(_ router.SteamSender)     {}
+func (r *fakeRouter) StartEgress(_ context.Context) error     { return nil }
 func (r *fakeRouter) AddPort(_ uint16)                     {}
 func (r *fakeRouter) RemovePort(_ uint16)                  {}
 func (r *fakeRouter) SetFirewall(_ bool)                   {}
@@ -222,6 +222,18 @@ func TestReadLoop_UndersizedControlFrame_NoCrash(t *testing.T) {
 	runReadLoopOnce(c) // must not panic
 }
 
+func TestReadLoop_NegativeBytesRead_ReturnsError(t *testing.T) {
+	c, _, _ := newTestClient(t)
+	bridgeReceive = func(_ *byte, _ int, _ *uint64) int32 { return -1 }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	err := c.ReadLoop(ctx)
+	if err == nil {
+		t.Error("expected non-nil error when bridgeReceive returns -1, got nil")
+	}
+}
+
 func TestReadLoop_DataPacket_ForwardedToRouter(t *testing.T) {
 	c, fr, _ := newTestClient(t)
 	payload := []byte{0x45, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}
@@ -320,5 +332,59 @@ func TestRespondToJoinRequest_Reject(t *testing.T) {
 	defer c.peermutex.RUnlock()
 	if c.steamIDs[55] {
 		t.Error("rejected peer 55 must not be added as peer")
+	}
+}
+
+// ── Disconnect ────────────────────────────────────────────────────────────────
+
+func TestDisconnect_BroadcastsToAllPeers(t *testing.T) {
+	c, _, sent := newTestClient(t)
+	// Register two peers.
+	c.AddPeer(10)
+	c.AddPeer(20)
+	// Give the client a local IP so the disconnect frame carries it.
+	c.localIP.Store(0x0A080001) // 10.8.0.1
+
+	c.Disconnect()
+
+	// Each peer must have received exactly one ActionDisconnect reliable frame.
+	peerFrames := map[uint64]int{}
+	for _, f := range *sent {
+		if len(f) >= 2 && f[0] == protocol.PacketTypeControl && f[1] == protocol.ActionDisconnect {
+			// The destination steamID isn't in the frame itself; count total frames.
+			peerFrames[0]++
+		}
+	}
+	if peerFrames[0] != 2 {
+		t.Errorf("expected 2 ActionDisconnect frames (one per peer), got %d: %v", peerFrames[0], *sent)
+	}
+}
+
+func TestReadLoop_ActionDisconnect_RemovesPeerAndReleasesIP(t *testing.T) {
+	c, _, _ := newTestClient(t)
+
+	// Pre-allocate an IP for the peer that will disconnect.
+	const disconnectingPeer = uint64(55)
+	allocatedIP := c.ipPool.Allocate(disconnectingPeer)
+
+	// Register the peer.
+	c.AddPeer(disconnectingPeer)
+
+	// Feed an ActionDisconnect frame from that peer.
+	feedPacket(makeControlFrame(protocol.ActionDisconnect, allocatedIP), disconnectingPeer)
+
+	runReadLoopOnce(c)
+
+	// The IP must be released (recyclable by a new allocation).
+	recycled := c.ipPool.Allocate(99)
+	if recycled != allocatedIP {
+		t.Errorf("expected released IP %08x to be recycled, got %08x", allocatedIP, recycled)
+	}
+
+	// The peer must be removed from steamIDs.
+	c.peermutex.RLock()
+	defer c.peermutex.RUnlock()
+	if c.steamIDs[disconnectingPeer] {
+		t.Errorf("peer %d should have been removed after ActionDisconnect", disconnectingPeer)
 	}
 }

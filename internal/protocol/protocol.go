@@ -11,8 +11,9 @@ type ControlMessage struct {
 }
 
 const (
-	ActionRequestIP = 0
-	ActionOfferIP   = 1
-	ActionAckIP     = 2
-	ActionNackIP    = 3
+	ActionRequestIP  = 0
+	ActionOfferIP    = 1
+	ActionAckIP      = 2
+	ActionNackIP     = 3
+	ActionDisconnect = 4 // sender is leaving; IP field carries the sender's local IP
 )

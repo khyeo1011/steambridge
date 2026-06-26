@@ -56,6 +56,9 @@ func (a *App) startup(ctx context.Context) {
 	a.facade.SetJoinConfirmHandler(func(id uint64) {
 		runtime.EventsEmit(a.ctx, "joinConfirmRequest", fmt.Sprintf("%d", id))
 	})
+	a.facade.SetDisconnectHandler(func() {
+		runtime.EventsEmit(a.ctx, "bridgeDisconnected")
+	})
 }
 
 func (a *App) domReady(ctx context.Context) {

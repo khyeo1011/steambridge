@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"steambridge/internal/utils"
+	"sync/atomic"
 
 	"golang.org/x/sys/windows"
 	"golang.zx2c4.com/wintun"
@@ -47,9 +48,11 @@ func cwdDir() string {
 }
 
 type Device struct {
-	adapter *wintun.Adapter
-	session wintun.Session
-	name    string
+	adapter    *wintun.Adapter
+	session    wintun.Session
+	name       string
+	closeEvent windows.Handle
+	closed     atomic.Bool
 }
 
 func NewTUN(ifaceName string, ifaceID string) (TunInterface, error) {
@@ -69,10 +72,19 @@ func NewTUN(ifaceName string, ifaceID string) (TunInterface, error) {
 		return nil, fmt.Errorf("failed to start wintun session: %w", err)
 	}
 
+	// Manual-reset event used by Unblock() to wake a blocked Read.
+	closeEvent, err := windows.CreateEvent(nil, 1, 0, nil)
+	if err != nil {
+		session.End()
+		adapter.Close()
+		return nil, fmt.Errorf("failed to create close event: %w", err)
+	}
+
 	dev := &Device{
-		adapter: adapter,
-		session: session,
-		name:    ifaceName,
+		adapter:    adapter,
+		session:    session,
+		name:       ifaceName,
+		closeEvent: closeEvent,
 	}
 
 	return dev, nil
@@ -80,6 +92,10 @@ func NewTUN(ifaceName string, ifaceID string) (TunInterface, error) {
 
 func (d *Device) Read(p []byte) (int, error) {
 	for {
+		if d.closed.Load() {
+			return 0, io.EOF
+		}
+
 		packet, err := d.session.ReceivePacket()
 		if err == nil {
 			n := copy(p, packet)
@@ -91,7 +107,12 @@ func (d *Device) Read(p []byte) (int, error) {
 		case windows.ERROR_HANDLE_EOF:
 			return 0, io.EOF
 		case windows.ERROR_NO_MORE_ITEMS:
-			windows.WaitForSingleObject(d.session.ReadWaitEvent(), windows.INFINITE)
+			// Wait for either new data or an Unblock() signal.
+			windows.WaitForMultipleObjects(
+				[]windows.Handle{d.closeEvent, d.session.ReadWaitEvent()},
+				false,
+				windows.INFINITE,
+			) //nolint:errcheck
 			continue
 		default:
 			return 0, fmt.Errorf("wintun read error: %w", err)
@@ -100,6 +121,9 @@ func (d *Device) Read(p []byte) (int, error) {
 }
 
 func (d *Device) Write(p []byte) (int, error) {
+	if d.closed.Load() {
+		return 0, io.EOF
+	}
 	packet, err := d.session.AllocateSendPacket(len(p))
 	if err != nil {
 		return 0, fmt.Errorf("failed to allocate send packet: %w", err)
@@ -110,12 +134,24 @@ func (d *Device) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// Unblock wakes any goroutine blocked in Read without freeing device resources.
+// Call Close() after all goroutines have exited.
+func (d *Device) Unblock() error {
+	d.closed.Store(true)
+	return windows.SetEvent(d.closeEvent)
+}
+
+// Close frees the wintun session and adapter. Must only be called after all
+// goroutines using Read/Write have returned (i.e. after wg.Wait()).
 func (d *Device) Close() error {
 	d.session.End()
+	if d.closeEvent != 0 {
+		windows.CloseHandle(d.closeEvent) //nolint:errcheck
+		d.closeEvent = 0
+	}
 	if d.adapter != nil {
 		return d.adapter.Close()
 	}
-	wintun.Uninstall()
 	return nil
 }
 
