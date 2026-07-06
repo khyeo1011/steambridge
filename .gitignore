@@ -34,3 +34,6 @@ plan.md
 sdk/
 build/
 CLAUDE.md
+
+# e2e harness — contains hostname/username, copy from e2e.config.example.ps1
+scripts/e2e/e2e.config.ps1

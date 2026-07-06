@@ -9,9 +9,7 @@ type Pool struct {
 	baseIP      uint32
 	hostCounter uint32
 	leases      map[uint64]uint32
-	// TODO(human): add a free-list field here to track released host numbers
-	// so Allocate can reuse them before incrementing hostCounter.
-	// Consider: []uint32 slice-as-stack (LIFO) vs a queue (FIFO).
+	// released holds freed IPs, reused FIFO before advancing hostCounter.
 	released []uint32
 }
 
