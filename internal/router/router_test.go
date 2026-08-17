@@ -205,20 +205,31 @@ func TestHandleIngress_InvalidLanDropped(t *testing.T) {
 }
 
 func TestHandleIngress_PIHeaderStripped(t *testing.T) {
-	// Packets starting with 0x00 or 0x02 have a 4-byte PI header before the IP
-	// packet; it must be removed before writing to TUN.
-	tun := newFakeTun()
-	r := NewRouter(tun, &fakeSteam{})
-	pkt := makeIPv4(ip(10, 8, 0, 3), ip(10, 8, 0, 2))
-	piPkt := append([]byte{0x00, 0x00, 0x08, 0x00}, pkt...)
-	r.HandleIngress(1, piPkt)
-	tun.mu.Lock()
-	defer tun.mu.Unlock()
-	if len(tun.written) != 1 {
-		t.Fatal("PI-header packet should have been written to TUN")
+	// Packets starting with 0x00 or 0x02 have a 4-byte PI/AF header before the
+	// IP packet; it must be removed before writing to TUN.
+	tests := []struct {
+		name   string
+		header []byte
+	}{
+		{name: "Linux PI header (0x00)", header: []byte{0x00, 0x00, 0x08, 0x00}},
+		{name: "utun AF header (0x02)", header: []byte{0x02, 0x00, 0x00, 0x02}},
 	}
-	if !bytes.Equal(tun.written[0], pkt) {
-		t.Errorf("expected PI header stripped, got %x", tun.written[0])
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tun := newFakeTun()
+			r := NewRouter(tun, &fakeSteam{})
+			pkt := makeIPv4(ip(10, 8, 0, 3), ip(10, 8, 0, 2))
+			piPkt := append(append([]byte{}, tt.header...), pkt...)
+			r.HandleIngress(1, piPkt)
+			tun.mu.Lock()
+			defer tun.mu.Unlock()
+			if len(tun.written) != 1 {
+				t.Fatal("PI-header packet should have been written to TUN")
+			}
+			if !bytes.Equal(tun.written[0], pkt) {
+				t.Errorf("expected PI header stripped, got %x", tun.written[0])
+			}
+		})
 	}
 }
 
