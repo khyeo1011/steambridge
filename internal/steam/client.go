@@ -120,6 +120,7 @@ func (c *Client) joinRetry(host uint64) {
 		if !pending {
 			return
 		}
+		log.Printf("Join to %v still pending; retrying ActionRequestIP", host)
 		c.SendControlMessage(host, protocol.ActionRequestIP, 0)
 	}
 }
@@ -258,7 +259,7 @@ func (c *Client) ReadLoop(ctx context.Context) error {
 
 			switch packetCopy[0] {
 			case protocol.PacketTypeData:
-				// Layer 2 Ethernet Frame, pass to TAP
+				// Layer 3 IP packet, pass to the TUN device via the router
 				// Go slicing is actually really efficient here because it creates a header instead of copying
 				c.router.HandleIngress(remoteSteamID, packetCopy[1:])
 
@@ -278,6 +279,11 @@ func (c *Client) ReadLoop(ctx context.Context) error {
 				switch msg.Action {
 				case protocol.ActionRequestIP:
 					assignedIP := c.ipPool.Allocate(remoteSteamID)
+					if assignedIP == 0 {
+						log.Printf("IP pool exhausted; NACKing request from %v", remoteSteamID)
+						c.SendControlMessage(remoteSteamID, protocol.ActionNackIP, 0)
+						continue
+					}
 					c.SendControlMessage(remoteSteamID, protocol.ActionOfferIP, assignedIP)
 					log.Printf("Assigned IP %s to %v", utils.IntIPtoString(assignedIP), remoteSteamID)
 				case protocol.ActionOfferIP:
@@ -290,9 +296,15 @@ func (c *Client) ReadLoop(ctx context.Context) error {
 					assigned := false
 					for i := 0; i < 3; i++ {
 						iface, err := net.InterfaceByName(c.router.GetDevName())
+						if err != nil {
+							log.Printf("Error getting interface %s: %v", c.router.GetDevName(), err)
+							time.Sleep(time.Second)
+							continue
+						}
 						addrs, err := iface.Addrs()
 						if err != nil {
-							log.Printf("Error getting addresses")
+							log.Printf("Error getting addresses for %s: %v", iface.Name, err)
+							time.Sleep(time.Second)
 							continue
 						}
 						for _, addr := range addrs {
@@ -319,15 +331,27 @@ func (c *Client) ReadLoop(ctx context.Context) error {
 				case protocol.ActionAckIP:
 					log.Printf("Received ACK for IP %s from %v", utils.IntIPtoString(msg.IP), remoteSteamID)
 				case protocol.ActionNackIP:
-					if msg.IP != 0 {
-						c.ipPool.Release(msg.IP)
-						log.Printf("Releasing IP %s", utils.IntIPtoString(msg.IP))
-					} else {
-						log.Printf("Peceived 0 as nack op")
+					// Host side: the guest rejected our offer. Release only the
+					// lease held by the authenticated sender — never the IP named
+					// in the payload, which any peer could forge to free a
+					// victim's lease.
+					if released, ok := c.ipPool.ReleaseBySteamID(remoteSteamID); ok {
+						log.Printf("Releasing IP %s leased to %v", utils.IntIPtoString(released), remoteSteamID)
+					} else if msg.IP == 0 {
+						log.Printf("Received 0 as nack op")
 					}
+					// Guest side: the host NACKed our join (e.g. pool exhausted);
+					// resolve now instead of waiting for the 45s timeout.
+					// No-op if no join to this peer is pending.
+					c.resolveJoin(remoteSteamID, false)
 				case protocol.ActionDisconnect:
-					log.Printf("Peer %d disconnected; releasing IP %s", remoteSteamID, utils.IntIPtoString(msg.IP))
-					c.ipPool.Release(msg.IP)
+					// Release only the lease held by the authenticated sender;
+					// the payload IP is untrusted (see ActionNackIP).
+					if released, ok := c.ipPool.ReleaseBySteamID(remoteSteamID); ok {
+						log.Printf("Peer %d disconnected; releasing IP %s", remoteSteamID, utils.IntIPtoString(released))
+					} else {
+						log.Printf("Peer %d disconnected", remoteSteamID)
+					}
 					c.removePeer(remoteSteamID)
 					// resolveJoin is a no-op if they were never in pendingJoins.
 					c.resolveJoin(remoteSteamID, false)
