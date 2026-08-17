@@ -462,3 +462,25 @@ func TestReadLoop_ActionDisconnect_RemovesPeerAndReleasesIP(t *testing.T) {
 		t.Errorf("peer %d should have been removed after ActionDisconnect", disconnectingPeer)
 	}
 }
+
+func TestReadLoop_DoubleDisconnect_ReleasesOnce(t *testing.T) {
+	c, _, _ := newTestClient(t)
+	const peer = uint64(55)
+	allocatedIP := c.ipPool.Allocate(peer)
+	c.AddPeer(peer)
+
+	// The same peer sends ActionDisconnect twice (e.g. a retransmit).
+	feedPacket(makeControlFrame(protocol.ActionDisconnect, allocatedIP), peer)
+	runReadLoopOnce(c)
+	feedPacket(makeControlFrame(protocol.ActionDisconnect, allocatedIP), peer)
+	runReadLoopOnce(c)
+
+	// The freed IP must be on the free-list exactly once: the first new
+	// allocation recycles it, the second must get a fresh IP.
+	if got := c.ipPool.Allocate(98); got != allocatedIP {
+		t.Errorf("first Allocate after disconnect: got %08x, want recycled %08x", got, allocatedIP)
+	}
+	if got := c.ipPool.Allocate(99); got == allocatedIP {
+		t.Errorf("IP %08x handed out twice — double disconnect double-released the lease", allocatedIP)
+	}
+}

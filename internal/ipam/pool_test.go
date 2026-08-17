@@ -73,6 +73,66 @@ func TestAllocate_Recycle(t *testing.T) {
 	}
 }
 
+// TestReleaseBySteamID_DoubleReleaseIsNoOp verifies a second release from the
+// same SteamID does nothing: the freed IP must land on the free-list exactly
+// once, so two subsequent Allocates for new peers get distinct IPs.
+func TestReleaseBySteamID_DoubleReleaseIsNoOp(t *testing.T) {
+	p := NewPool()
+	ipA := p.Allocate(1)
+	if got, ok := p.ReleaseBySteamID(1); !ok || got != ipA {
+		t.Fatalf("first release: got (%08x, %v), want (%08x, true)", got, ok, ipA)
+	}
+	if got, ok := p.ReleaseBySteamID(1); ok || got != 0 {
+		t.Errorf("second release: got (%08x, %v), want (0, false)", got, ok)
+	}
+	first := p.Allocate(2)
+	second := p.Allocate(3)
+	if first != ipA {
+		t.Errorf("first Allocate after release: got %08x, want recycled %08x", first, ipA)
+	}
+	if second == ipA {
+		t.Errorf("freed IP %08x handed out twice — free-list holds a duplicate", ipA)
+	}
+}
+
+// TestAllocate_RecycleFIFO verifies multiple freed IPs are reused in the
+// order they were released.
+func TestAllocate_RecycleFIFO(t *testing.T) {
+	p := NewPool()
+	ipA := p.Allocate(1) // 10.8.0.2
+	ipB := p.Allocate(2) // 10.8.0.3
+	p.ReleaseBySteamID(2)
+	p.ReleaseBySteamID(1)
+
+	// Released order was B then A, so reuse must be B first.
+	if got := p.Allocate(3); got != ipB {
+		t.Errorf("first recycled Allocate: got %08x, want %08x (FIFO)", got, ipB)
+	}
+	if got := p.Allocate(4); got != ipA {
+		t.Errorf("second recycled Allocate: got %08x, want %08x (FIFO)", got, ipA)
+	}
+}
+
+// TestAllocate_RepeatSteamIDAtCapacity verifies the idempotent path still
+// works when the pool is exhausted: an existing leaseholder re-requesting
+// gets its own IP back, not 0.
+func TestAllocate_RepeatSteamIDAtCapacity(t *testing.T) {
+	p := NewPool()
+	var first uint32
+	for i := 0; i < 253; i++ {
+		got := p.Allocate(uint64(i + 1))
+		if i == 0 {
+			first = got
+		}
+	}
+	if got := p.Allocate(9999); got != 0 {
+		t.Fatalf("pool should be exhausted, but Allocate returned %08x", got)
+	}
+	if got := p.Allocate(1); got != first {
+		t.Errorf("repeat Allocate(1) at capacity: got %08x, want existing lease %08x", got, first)
+	}
+}
+
 // TestAllocate_Exhaustion verifies the pool stays inside the /24: the last
 // usable host is 10.8.0.254, the next Allocate fails with 0 (never handing
 // out the .255 broadcast or walking into 10.8.1.x), and releasing a lease
