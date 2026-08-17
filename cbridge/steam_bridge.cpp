@@ -72,9 +72,18 @@ BRIDGE_EXPORT int Bridge_Receive(uint8_t* buffer, int bufferSize, uint64_t * out
     if (!SteamNetworking()->IsP2PPacketAvailable(&msgSize, 0)) {
         return 0; 
     }
-    if (msgSize > bufferSize) {
-        // Message is too large for the buffer
-        return -1;
+    if (msgSize > (uint32_t)bufferSize) {
+        // Message is too large for the caller's buffer. Read-and-discard it so
+        // it doesn't sit at the head of the queue forever, and return 0 (no
+        // packet delivered). Returning -1 here would let any peer tear down the
+        // whole bridge with a single oversized message; -1 is reserved for
+        // genuinely fatal states.
+        uint8_t* discard = new uint8_t[msgSize];
+        uint32_t discardedBytes;
+        CSteamID discardSender;
+        SteamNetworking()->ReadP2PPacket(discard, msgSize, &discardedBytes, &discardSender, 0);
+        delete[] discard;
+        return 0;
     }
     CSteamID remoteSteamID;
     uint32_t bytesRead;
