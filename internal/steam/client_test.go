@@ -335,6 +335,67 @@ func TestRespondToJoinRequest_Reject(t *testing.T) {
 	}
 }
 
+// ── Send paths / reliable fallback ───────────────────────────────────────────
+
+func TestSendToAll_EmptyFrame_NoBridgeCalls(t *testing.T) {
+	c, _, _ := newTestClient(t)
+	c.AddPeer(10)
+
+	origSend, origReliable := bridgeSend, bridgeSendReliable
+	t.Cleanup(func() { bridgeSend, bridgeSendReliable = origSend, origReliable })
+
+	var sendCalls, reliableCalls int
+	bridgeSend = func(_ uint64, _ *byte, _ int) bool { sendCalls++; return true }
+	bridgeSendReliable = func(_ uint64, _ *byte, _ int) bool { reliableCalls++; return true }
+
+	c.SendToAll(nil)      // must not panic on &frame[0]
+	c.SendToAll([]byte{}) // ditto for a non-nil empty slice
+
+	if sendCalls != 0 || reliableCalls != 0 {
+		t.Errorf("empty frame must not reach the bridge: send=%d reliable=%d", sendCalls, reliableCalls)
+	}
+}
+
+func TestSendWithFallback_UnreliableFails_RetriesReliableOnce(t *testing.T) {
+	newTestClient(t)
+
+	origSend, origReliable := bridgeSend, bridgeSendReliable
+	t.Cleanup(func() { bridgeSend, bridgeSendReliable = origSend, origReliable })
+
+	var sendCalls, reliableCalls int
+	bridgeSend = func(_ uint64, _ *byte, _ int) bool { sendCalls++; return false }
+	bridgeSendReliable = func(_ uint64, _ *byte, _ int) bool { reliableCalls++; return true }
+
+	sendWithFallback(42, []byte{1, 2, 3})
+
+	if sendCalls != 1 {
+		t.Errorf("bridgeSend called %d times, want 1", sendCalls)
+	}
+	if reliableCalls != 1 {
+		t.Errorf("bridgeSendReliable called %d times, want exactly 1", reliableCalls)
+	}
+}
+
+func TestSendWithFallback_UnreliableSucceeds_NoReliableCall(t *testing.T) {
+	newTestClient(t)
+
+	origSend, origReliable := bridgeSend, bridgeSendReliable
+	t.Cleanup(func() { bridgeSend, bridgeSendReliable = origSend, origReliable })
+
+	var sendCalls, reliableCalls int
+	bridgeSend = func(_ uint64, _ *byte, _ int) bool { sendCalls++; return true }
+	bridgeSendReliable = func(_ uint64, _ *byte, _ int) bool { reliableCalls++; return true }
+
+	sendWithFallback(42, []byte{1, 2, 3})
+
+	if sendCalls != 1 {
+		t.Errorf("bridgeSend called %d times, want 1", sendCalls)
+	}
+	if reliableCalls != 0 {
+		t.Errorf("bridgeSendReliable must not be called on success, got %d calls", reliableCalls)
+	}
+}
+
 // ── Disconnect ────────────────────────────────────────────────────────────────
 
 func TestDisconnect_BroadcastsToAllPeers(t *testing.T) {
