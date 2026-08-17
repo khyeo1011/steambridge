@@ -188,26 +188,46 @@ func (c *Client) Disconnect() {
 	}
 }
 
+// sendWithFallback sends a frame unreliably and, if the legacy ISteamNetworking
+// transport rejects it (it silently drops unreliable packets above its MTU),
+// retries once via the reliable channel. Full root-cause verification (packets
+// up to MAXMTU=1180 transiting end-to-end) requires a live Steam session and
+// cannot be tested in this environment.
+func sendWithFallback(steamID uint64, frame []byte) {
+	if bridgeSend(steamID, &frame[0], len(frame)) {
+		return
+	}
+	log.Printf("Steam unreliable send of %d bytes to %v failed; retrying reliable", len(frame), steamID)
+	if !bridgeSendReliable(steamID, &frame[0], len(frame)) {
+		log.Printf("Steam reliable send of %d bytes to %v failed", len(frame), steamID)
+	}
+}
+
 func (c *Client) SendToPeer(steamID uint64, frame []byte) {
 	if len(frame) == 0 {
 		return
 	}
-	bridgeSend(steamID, &frame[0], len(frame))
+	sendWithFallback(steamID, frame)
 }
 
 func (c *Client) SendToPeerReliable(steamID uint64, frame []byte) {
 	if len(frame) == 0 {
 		return
 	}
-	bridgeSendReliable(steamID, &frame[0], len(frame))
+	if !bridgeSendReliable(steamID, &frame[0], len(frame)) {
+		log.Printf("Steam reliable send of %d bytes to %v failed", len(frame), steamID)
+	}
 }
 
 func (c *Client) SendToAll(frame []byte) {
+	if len(frame) == 0 {
+		return
+	}
 	c.peermutex.RLock()
 	defer c.peermutex.RUnlock()
 
 	for steamID := range c.steamIDs {
-		bridgeSend(steamID, &frame[0], len(frame))
+		sendWithFallback(steamID, frame)
 	}
 }
 
@@ -250,7 +270,10 @@ func (c *Client) ReadLoop(ctx context.Context) error {
 				time.Sleep(time.Millisecond) // Don't peg the CPU at 100%
 				continue
 			} else if bytesRead < 0 {
-				return fmt.Errorf("bridge receive returned %d: Steam P2P session dropped", bytesRead)
+				// The bridge reserves negative returns for genuinely fatal
+				// states (oversized packets are discarded C++-side and
+				// reported as 0), so tearing down the read loop is correct.
+				return fmt.Errorf("bridge receive returned fatal error %d", bytesRead)
 			}
 			log.Printf("Steam Received %d bytes from %v", bytesRead, remoteSteamID)
 			packetCopy := make([]byte, bytesRead)
