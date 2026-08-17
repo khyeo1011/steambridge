@@ -363,3 +363,9 @@ func (c *Client) GetLocalSteamID() uint64 {
 func (c *Client) GetLocalIP() uint32 {
 	return c.localIP.Load()
 }
+
+// SetLocalIP records this node's VPN IP. Used by the facade for host
+// self-assignment; guests get theirs recorded via the ActionOfferIP flow.
+func (c *Client) SetLocalIP(ip uint32) {
+	c.localIP.Store(ip)
+}
