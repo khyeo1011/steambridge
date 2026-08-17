@@ -215,6 +215,80 @@ func TestReadLoop_ActionNackIP_ReleasesLease(t *testing.T) {
 	}
 }
 
+func TestReadLoop_ActionNackIP_IgnoresForgedIP(t *testing.T) {
+	c, _, _ := newTestClient(t)
+	// Victim 55 holds a lease; attacker 66 sends a NACK naming the victim's IP.
+	victimIP := c.ipPool.Allocate(55)
+	feedPacket(makeControlFrame(protocol.ActionNackIP, victimIP), 66)
+
+	runReadLoopOnce(c)
+
+	// The victim's lease must be untouched: a fresh Allocate for a new peer
+	// must NOT hand out the victim's IP.
+	if got := c.ipPool.Allocate(99); got == victimIP {
+		t.Errorf("forged NACK from 66 released victim 55's lease %08x", victimIP)
+	}
+}
+
+func TestReadLoop_ActionNackIP_ResolvesPendingJoin(t *testing.T) {
+	c, _, _ := newTestClient(t)
+	var gotHost uint64
+	var gotConnected = true
+	var fired bool
+	c.SetJoinResultHandler(func(h uint64, connected bool) {
+		fired = true
+		gotHost = h
+		gotConnected = connected
+	})
+	c.joinMutex.Lock()
+	c.pendingJoins[88] = true
+	c.joinMutex.Unlock()
+
+	// Host 88 NACKs the join (e.g. pool exhausted).
+	feedPacket(makeControlFrame(protocol.ActionNackIP, 0), 88)
+	runReadLoopOnce(c)
+
+	if !fired {
+		t.Fatal("onJoinResult did not fire on NACK")
+	}
+	if gotHost != 88 || gotConnected {
+		t.Errorf("onJoinResult: got (%d, %v), want (88, false)", gotHost, gotConnected)
+	}
+}
+
+func TestReadLoop_ActionRequestIP_ExhaustedPool_Nacks(t *testing.T) {
+	c, _, sent := newTestClient(t)
+	// Exhaust the pool: hosts 2..254.
+	for i := 0; i < 253; i++ {
+		if c.ipPool.Allocate(uint64(1000+i)) == 0 {
+			t.Fatalf("pool exhausted early at lease #%d", i+1)
+		}
+	}
+	feedPacket(makeControlFrame(protocol.ActionRequestIP, 0), 55)
+
+	runReadLoopOnce(c)
+
+	var nacked, offered bool
+	for _, f := range *sent {
+		if len(f) >= 6 && f[0] == protocol.PacketTypeControl {
+			switch f[1] {
+			case protocol.ActionNackIP:
+				if binary.BigEndian.Uint32(f[2:6]) == 0 {
+					nacked = true
+				}
+			case protocol.ActionOfferIP:
+				offered = true
+			}
+		}
+	}
+	if !nacked {
+		t.Errorf("expected ActionNackIP(0) on exhausted pool, sends: %v", *sent)
+	}
+	if offered {
+		t.Errorf("must not send ActionOfferIP on exhausted pool, sends: %v", *sent)
+	}
+}
+
 func TestReadLoop_UndersizedControlFrame_NoCrash(t *testing.T) {
 	c, _, _ := newTestClient(t)
 	// Control frame with only 3 bytes (less than the required 6).

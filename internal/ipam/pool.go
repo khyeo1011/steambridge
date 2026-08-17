@@ -4,6 +4,11 @@ import (
 	"sync"
 )
 
+// maxHost is the highest usable host number in the 10.8.0.0/24 subnet.
+// .0 is the network address, .1 is the host, .255 is broadcast, so guests
+// get 10.8.0.2 through 10.8.0.254.
+const maxHost = 254
+
 type Pool struct {
 	mu          sync.Mutex
 	baseIP      uint32
@@ -23,6 +28,9 @@ func NewPool() *Pool {
 	}
 }
 
+// Allocate returns the IP leased to steamID, granting a new lease if needed.
+// Returns 0 when the pool is exhausted (all of 10.8.0.2-10.8.0.254 leased
+// and nothing on the free-list).
 func (p *Pool) Allocate(steamID uint64) uint32 {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -38,20 +46,27 @@ func (p *Pool) Allocate(steamID uint64) uint32 {
 		return ip
 	}
 
+	if p.hostCounter > maxHost {
+		return 0
+	}
+
 	ip := p.baseIP | p.hostCounter
 	p.leases[steamID] = ip
 	p.hostCounter++
 	return ip
 }
 
-func (p *Pool) Release(ip uint32) {
+// ReleaseBySteamID frees the lease owned by steamID, returning the freed IP
+// and true, or (0, false) if steamID holds no lease. Peers can only ever free
+// their own lease this way, unlike releasing by an attacker-supplied IP.
+func (p *Pool) ReleaseBySteamID(steamID uint64) (uint32, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	for steamID, lease := range p.leases {
-		if lease == ip {
-			delete(p.leases, steamID)
-			p.released = append(p.released, ip)
-			return
-		}
+	ip, ok := p.leases[steamID]
+	if !ok {
+		return 0, false
 	}
+	delete(p.leases, steamID)
+	p.released = append(p.released, ip)
+	return ip, true
 }
