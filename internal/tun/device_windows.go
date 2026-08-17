@@ -71,12 +71,17 @@ func deterministicGUID(seed string) windows.GUID {
 	return guid
 }
 
-func NewTUN(ifaceName string, ifaceID string) (TunInterface, error) {
-	seed := ifaceID
-	if seed == "" {
-		seed = ifaceName
+// adapterGUIDSeed picks the seed for the adapter GUID: the stable ifaceID
+// when available, falling back to the interface name otherwise.
+func adapterGUIDSeed(ifaceName, ifaceID string) string {
+	if ifaceID != "" {
+		return ifaceID
 	}
-	wintunGUID := deterministicGUID(seed)
+	return ifaceName
+}
+
+func NewTUN(ifaceName string, ifaceID string) (TunInterface, error) {
+	wintunGUID := deterministicGUID(adapterGUIDSeed(ifaceName, ifaceID))
 	adapter, err := wintun.CreateAdapter(ifaceName, "SteamBridge", &wintunGUID)
 	if err != nil {
 		// Fallback to Open if it already exists
