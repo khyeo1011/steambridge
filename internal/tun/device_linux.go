@@ -111,6 +111,13 @@ func (d *Device) Close() error {
 }
 
 func (d *Device) SetIP(ip uint32) error {
+	// Flush any existing addresses first so repeated SetIP calls (e.g. host
+	// self-assignment followed by a guest IP offer) replace instead of stack.
+	flushCmd := exec.Command("sudo", "ip", "addr", "flush", "dev", d.Name())
+	if err := flushCmd.Run(); err != nil {
+		log.Printf("Failed to flush addresses on %s", d.Name())
+		return err
+	}
 	ipCmd := exec.Command("sudo", "ip", "addr", "add", fmt.Sprintf("%s/24", utils.IntIPtoString(ip)), "dev", d.Name())
 	if err := ipCmd.Run(); err != nil {
 		log.Printf("Failed to set ip address to %s", utils.IntIPtoString(ip))

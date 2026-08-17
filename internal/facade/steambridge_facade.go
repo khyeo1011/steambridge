@@ -9,6 +9,7 @@ import (
 	"steambridge/internal/router"
 	"steambridge/internal/steam"
 	"steambridge/internal/tun"
+	"steambridge/internal/utils"
 	"sync"
 	"sync/atomic"
 )
@@ -75,8 +76,14 @@ func NewFacade(config Config) *Facade {
 	}
 }
 
+// hostIP is the subnet root (10.8.0.1) a node self-assigns when it starts as
+// a host. The IPAM pool never hands it out (hostCounter starts at 2).
+const hostIP uint32 = (10 << 24) | (8 << 16) | 1
+
 func (f *Facade) Start(ctx context.Context) error {
-	if f.running.Load() {
+	// Claim the running flag atomically so two concurrent Starts cannot both
+	// proceed. Every error path below must reset it.
+	if !f.running.CompareAndSwap(false, true) {
 		return nil
 	}
 	log.Printf("Setting up TUN interface: %s\n", f.ifaceName)
@@ -84,6 +91,7 @@ func (f *Facade) Start(ctx context.Context) error {
 	if err != nil {
 		wd, _ := os.Getwd()
 		log.Printf("CWD: %s", wd)
+		f.running.Store(false)
 		return fmt.Errorf("could not create TUN device: %w", err)
 	}
 	f.tunDev = tunDev
@@ -94,6 +102,7 @@ func (f *Facade) Start(ctx context.Context) error {
 	client, err := steam.NewClient(f.router)
 	if err != nil {
 		f.tunDev.Close()
+		f.running.Store(false)
 		return fmt.Errorf("steam client init: %w", err)
 	}
 	f.client = client
@@ -108,7 +117,6 @@ func (f *Facade) Start(ctx context.Context) error {
 
 	f.router.SetSteamSender(f.client)
 	log.Printf("SteamBridge is live on interface '%s'! Waiting for shutdown.\n", f.ifaceName)
-	f.running.Store(true)
 	f.abnormalExitOnce = sync.Once{} // reset for this Start/Stop cycle
 	engineCtx, cancel := context.WithCancel(ctx)
 	f.cancelFunc = cancel
@@ -142,6 +150,15 @@ func (f *Facade) Start(ctx context.Context) error {
 	if f.bootstrapPeerID != 0 {
 		f.client.SendControlMessage(f.bootstrapPeerID, protocol.ActionRequestIP, 0)
 		log.Printf("Bootstrapped peer %v. Requesting IP address...", f.bootstrapPeerID)
+	} else {
+		// Starting as host: self-assign the subnet root so we have a VPN IP.
+		// If we later Join another host as a guest, ActionOfferIP replaces it.
+		if err := f.router.SetIP(hostIP); err != nil {
+			log.Printf("Warning: could not self-assign host IP %s: %v", utils.IntIPtoString(hostIP), err)
+		} else {
+			f.client.SetLocalIP(hostIP)
+			log.Printf("Self-assigned host IP %s", utils.IntIPtoString(hostIP))
+		}
 	}
 
 	return nil
@@ -156,9 +173,6 @@ func (f *Facade) Stop() error {
 	if f.client != nil {
 		f.client.SetJoinable(false)
 		f.client.Disconnect() // tell all peers we are leaving
-	}
-	if f.bootstrapPeerID != 0 && f.client != nil {
-		f.client.SendControlMessage(f.bootstrapPeerID, protocol.ActionNackIP, 0)
 	}
 
 	// Cancel the engine context so ReadLoop exits its ctx.Done() check.
@@ -209,18 +223,30 @@ func (f *Facade) OpenFriendsOverlay() {
 }
 
 func (f *Facade) AddPort(port uint16) {
+	if f.router == nil {
+		return
+	}
 	f.router.AddPort(port)
 }
 
 func (f *Facade) RemovePort(port uint16) {
+	if f.router == nil {
+		return
+	}
 	f.router.RemovePort(port)
 }
 
 func (f *Facade) SetFirewall(enabled bool) {
+	if f.router == nil {
+		return
+	}
 	f.router.SetFirewall(enabled)
 }
 
 func (f *Facade) GetLocalSteamID() uint64 {
+	if f.client == nil {
+		return 0
+	}
 	return f.client.GetLocalSteamID()
 }
 
