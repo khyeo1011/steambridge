@@ -38,8 +38,16 @@ const defaultStatus: StatusPayload = {
   peerCount: 0,
 }
 
-const errorMessage = (err: unknown): string =>
-  err instanceof Error ? err.message : String(err)
+const errorMessage = (err: unknown): string => {
+  if (err instanceof Error) return err.message
+  if (typeof err === 'string') return err
+  // Wails can reject with plain values; avoid rendering "[object Object]".
+  try {
+    return JSON.stringify(err) ?? String(err)
+  } catch {
+    return String(err)
+  }
+}
 
 const Home: NextPage = () => {
   const [status, setStatus] = useState<StatusPayload>(defaultStatus)
@@ -138,26 +146,38 @@ const Home: NextPage = () => {
   }
 
   const handleRespond = async (steamID: string, accept: boolean) => {
-    await app.RespondToJoin(steamID, accept)
-    setConnections(prev => {
-      const next = { ...prev }
-      if (accept) {
-        delete next[steamID]  // peer moves to Connected Peers card once data flows
-      } else {
-        next[steamID] = 'failed'
-      }
-      return next
-    })
+    setError(null)
+    try {
+      await app.RespondToJoin(steamID, accept)
+      setConnections(prev => {
+        const next = { ...prev }
+        if (accept) {
+          delete next[steamID]  // peer moves to Connected Peers card once data flows
+        } else {
+          next[steamID] = 'failed'
+        }
+        return next
+      })
+    } catch (err) {
+      setError(`Failed to ${accept ? 'accept' : 'reject'} join request: ${errorMessage(err)}`)
+    }
   }
 
   const handleJoin = async (steamID: string) => {
     setConnections(prev => ({ ...prev, [steamID]: 'pending' }))
-    // In browser mode, simulate the result after a short delay so the UI is testable.
-    if (!isWails()) {
-      setTimeout(() => setConnections(prev => ({ ...prev, [steamID]: 'connected' })), 1500)
+    setError(null)
+    try {
+      await app.JoinLobby(steamID)
+      // In browser mode, simulate the result after a short delay so the UI is testable.
+      if (!isWails()) {
+        setTimeout(() => setConnections(prev => ({ ...prev, [steamID]: 'connected' })), 1500)
+      }
+      await refresh()
+    } catch (err) {
+      // Don't leave the connection stuck in 'pending' forever.
+      setConnections(prev => ({ ...prev, [steamID]: 'failed' }))
+      setError(`Failed to join lobby ${steamID}: ${errorMessage(err)}`)
     }
-    await app.JoinLobby(steamID)
-    await refresh()
   }
 
   const handleToggleFirewall = async () => {
@@ -175,15 +195,25 @@ const Home: NextPage = () => {
   }
 
   const handleAddPort = async (port: number) => {
-    await app.AddPort(port)
-    const updated = await app.GetAllowedPorts()
-    setAllowedPorts(updated)
+    setError(null)
+    try {
+      await app.AddPort(port)
+      const updated = await app.GetAllowedPorts()
+      setAllowedPorts(updated)
+    } catch (err) {
+      setError(`Failed to add port ${port}: ${errorMessage(err)}`)
+    }
   }
 
   const handleRemovePort = async (port: number) => {
-    await app.RemovePort(port)
-    const updated = await app.GetAllowedPorts()
-    setAllowedPorts(updated)
+    setError(null)
+    try {
+      await app.RemovePort(port)
+      const updated = await app.GetAllowedPorts()
+      setAllowedPorts(updated)
+    } catch (err) {
+      setError(`Failed to remove port ${port}: ${errorMessage(err)}`)
+    }
   }
 
   const handleCopy = (text: string, type: 'ip' | 'steamid') => {
