@@ -3,6 +3,8 @@
 package tun
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -55,8 +57,31 @@ type Device struct {
 	closed     atomic.Bool
 }
 
+// deterministicGUID derives a stable windows.GUID from seed so the same
+// logical interface keeps the same adapter identity across runs, preventing
+// Windows from accumulating "Network 2, 3, 4..." profiles.
+func deterministicGUID(seed string) windows.GUID {
+	sum := sha256.Sum256([]byte(seed))
+	guid := windows.GUID{
+		Data1: binary.LittleEndian.Uint32(sum[0:4]),
+		Data2: binary.LittleEndian.Uint16(sum[4:6]),
+		Data3: binary.LittleEndian.Uint16(sum[6:8]),
+	}
+	copy(guid.Data4[:], sum[8:16])
+	return guid
+}
+
+// adapterGUIDSeed picks the seed for the adapter GUID: the stable ifaceID
+// when available, falling back to the interface name otherwise.
+func adapterGUIDSeed(ifaceName, ifaceID string) string {
+	if ifaceID != "" {
+		return ifaceID
+	}
+	return ifaceName
+}
+
 func NewTUN(ifaceName string, ifaceID string) (TunInterface, error) {
-	wintunGUID, _ := windows.GenerateGUID()
+	wintunGUID := deterministicGUID(adapterGUIDSeed(ifaceName, ifaceID))
 	adapter, err := wintun.CreateAdapter(ifaceName, "SteamBridge", &wintunGUID)
 	if err != nil {
 		// Fallback to Open if it already exists
@@ -162,5 +187,13 @@ func (d *Device) Name() string {
 func (d *Device) SetIP(ip uint32) error {
 	cmd := exec.Command("netsh", "interface", "ip", "set", "address",
 		fmt.Sprintf("name=%s", d.Name()), "static", utils.IntIPtoString(ip), "255.255.255.0")
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	// Cap the adapter MTU so packets fit within Steam's unreliable P2P limit,
+	// matching the Linux setup (see setupLink in device_linux.go).
+	cmd = exec.Command("netsh", "interface", "ipv4", "set", "subinterface",
+		d.Name(), fmt.Sprintf("mtu=%d", MAXMTU), "store=active")
 	return cmd.Run()
 }
