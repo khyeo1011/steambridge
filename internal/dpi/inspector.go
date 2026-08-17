@@ -78,6 +78,16 @@ func IsAllowedPort(packet []byte, allowedPorts *sync.Map) bool {
 
 	// Calculate the actual length of the IPv4 header
 	ipHeaderLen := int(packet[0]&0x0F) * 4
+	if ipHeaderLen < 20 || len(packet) < ipHeaderLen {
+		return false
+	}
+
+	// Non-first fragments carry no L4 header, so there are no ports to
+	// inspect. The tunnel MTU is small enough that we simply drop them.
+	fragmentOffset := binary.BigEndian.Uint16(packet[6:8]) & 0x1FFF
+	if fragmentOffset != 0 {
+		return false
+	}
 
 	// Protocol is at offset 9
 	protocolInfo := packet[9]

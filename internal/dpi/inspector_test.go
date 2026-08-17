@@ -25,8 +25,8 @@ func TestIsReliable(t *testing.T) {
 				0x00, 0x1c, // total length
 				0x00, 0x00, // identification
 				0x00, 0x00, // flags + fragment offset
-				0x40,       // TTL
-				17,         // protocol = UDP
+				0x40, // TTL
+				17,   // protocol = UDP
 			},
 			expected: false,
 		},
@@ -48,10 +48,10 @@ func TestIsReliable(t *testing.T) {
 			name: "IPv6 UDP",
 			// Raw IPv6 packet (TUN device — no Ethernet header). Next Header at offset 6.
 			frame: []byte{
-				0x60,       // version=6, TC=0, flow=0
+				0x60,             // version=6, TC=0, flow=0
 				0x00, 0x00, 0x00, // TC + flow label
 				0x00, 0x08, // payload length
-				17,         // next header = UDP
+				17, // next header = UDP
 			},
 			expected: false,
 		},
@@ -241,6 +241,36 @@ func TestIsAllowedPort(t *testing.T) {
 			packet:   func() []byte { p := make([]byte, 20); p[0] = (4 << 4) | 15; p[9] = 6; return p }(),
 			ports:    makeAllowedPorts(80),
 			expected: false,
+		},
+		{
+			// IHL=4 encodes a 16-byte header, below the IPv4 minimum of 20.
+			name:     "IHL below minimum reject",
+			packet:   func() []byte { p := makeIPv4Packet(6, 5, 80, 80); p[0] = (4 << 4) | 4; return p }(),
+			ports:    makeAllowedPorts(80),
+			expected: false,
+		},
+		{
+			// Fragment offset != 0: no L4 header present, must reject even if the
+			// bytes at the port offsets happen to match an allowed port.
+			name: "Non-first fragment reject",
+			packet: func() []byte {
+				p := makeIPv4Packet(17, 5, 443, 443)
+				p[6], p[7] = 0x00, 0x05 // fragment offset = 5
+				return p
+			}(),
+			ports:    makeAllowedPorts(443),
+			expected: false,
+		},
+		{
+			// MF flag set but offset 0: first fragment carries the L4 header.
+			name: "First fragment with MF flag allowed",
+			packet: func() []byte {
+				p := makeIPv4Packet(17, 5, 443, 443)
+				p[6] = 0x20 // MF flag, offset 0
+				return p
+			}(),
+			ports:    makeAllowedPorts(443),
+			expected: true,
 		},
 	}
 	for _, tt := range tests {

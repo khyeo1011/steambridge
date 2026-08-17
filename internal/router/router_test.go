@@ -1,6 +1,7 @@
 package router
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -54,23 +55,29 @@ func (f *fakeTun) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (f *fakeTun) Unblock() error              { f.doneOnce.Do(func() { close(f.done) }); return nil }
-func (f *fakeTun) Close() error                { return nil }
-func (f *fakeTun) SetIP(_ uint32) error        { return nil }
-func (f *fakeTun) Name() string                { return "faketun0" }
+func (f *fakeTun) Unblock() error       { f.doneOnce.Do(func() { close(f.done) }); return nil }
+func (f *fakeTun) Close() error         { return nil }
+func (f *fakeTun) SetIP(_ uint32) error { return nil }
+func (f *fakeTun) Name() string         { return "faketun0" }
 
 // fakeSteam satisfies SteamSender for tests.
 type fakeSteam struct {
-	mu         sync.Mutex
-	toPeer     []struct{ id uint64; pkt []byte }
-	toAll      [][]byte
+	mu     sync.Mutex
+	toPeer []struct {
+		id  uint64
+		pkt []byte
+	}
+	toAll [][]byte
 }
 
 func (s *fakeSteam) SendToPeer(steamID uint64, frame []byte) {
 	cp := make([]byte, len(frame))
 	copy(cp, frame)
 	s.mu.Lock()
-	s.toPeer = append(s.toPeer, struct{ id uint64; pkt []byte }{steamID, cp})
+	s.toPeer = append(s.toPeer, struct {
+		id  uint64
+		pkt []byte
+	}{steamID, cp})
 	s.mu.Unlock()
 }
 
@@ -87,10 +94,14 @@ func makeIPv4(srcIP, dstIP uint32) []byte {
 	p := make([]byte, 20)
 	p[0] = 0x45
 	p[9] = 17 // UDP
-	p[12] = byte(srcIP >> 24); p[13] = byte(srcIP >> 16)
-	p[14] = byte(srcIP >> 8); p[15] = byte(srcIP)
-	p[16] = byte(dstIP >> 24); p[17] = byte(dstIP >> 16)
-	p[18] = byte(dstIP >> 8); p[19] = byte(dstIP)
+	p[12] = byte(srcIP >> 24)
+	p[13] = byte(srcIP >> 16)
+	p[14] = byte(srcIP >> 8)
+	p[15] = byte(srcIP)
+	p[16] = byte(dstIP >> 24)
+	p[17] = byte(dstIP >> 16)
+	p[18] = byte(dstIP >> 8)
+	p[19] = byte(dstIP)
 	return p
 }
 
@@ -100,6 +111,23 @@ func ip(a, b, c, d byte) uint32 {
 }
 
 // ── Table ────────────────────────────────────────────────────────────────────
+
+func TestTable_UpdateIfAbsentOrSame(t *testing.T) {
+	tbl := NewTable()
+	addr := ip(10, 8, 0, 2)
+	if !tbl.UpdateIfAbsentOrSame(addr, 42) {
+		t.Fatal("first claim of an unclaimed IP should apply")
+	}
+	if !tbl.UpdateIfAbsentOrSame(addr, 42) {
+		t.Fatal("same-owner refresh should apply")
+	}
+	if tbl.UpdateIfAbsentOrSame(addr, 43) {
+		t.Fatal("claim by a different SteamID should be refused")
+	}
+	if got, _ := tbl.Lookup(addr); got != 42 {
+		t.Fatalf("entry overwritten: got %v, want 42", got)
+	}
+}
 
 func TestTable_UpdateLookupDelete(t *testing.T) {
 	tbl := NewTable()
@@ -176,22 +204,37 @@ func TestHandleIngress_InvalidLanDropped(t *testing.T) {
 	}
 }
 
-func TestHandleIngress_PIHeaderOffset(t *testing.T) {
-	// Packets starting with 0x00 or 0x02 have a 4-byte PI header before the IP packet.
-	tun := newFakeTun()
-	r := NewRouter(tun, &fakeSteam{})
-	pkt := makeIPv4(ip(10, 8, 0, 3), ip(10, 8, 0, 2))
-	piPkt := append([]byte{0x00, 0x00, 0x08, 0x00}, pkt...)
-	r.HandleIngress(1, piPkt)
-	tun.mu.Lock()
-	defer tun.mu.Unlock()
-	if len(tun.written) != 1 {
-		t.Fatal("PI-header packet should have been written to TUN")
+func TestHandleIngress_PIHeaderStripped(t *testing.T) {
+	// Packets starting with 0x00 or 0x02 have a 4-byte PI/AF header before the
+	// IP packet; it must be removed before writing to TUN.
+	tests := []struct {
+		name   string
+		header []byte
+	}{
+		{name: "Linux PI header (0x00)", header: []byte{0x00, 0x00, 0x08, 0x00}},
+		{name: "utun AF header (0x02)", header: []byte{0x02, 0x00, 0x00, 0x02}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tun := newFakeTun()
+			r := NewRouter(tun, &fakeSteam{})
+			pkt := makeIPv4(ip(10, 8, 0, 3), ip(10, 8, 0, 2))
+			piPkt := append(append([]byte{}, tt.header...), pkt...)
+			r.HandleIngress(1, piPkt)
+			tun.mu.Lock()
+			defer tun.mu.Unlock()
+			if len(tun.written) != 1 {
+				t.Fatal("PI-header packet should have been written to TUN")
+			}
+			if !bytes.Equal(tun.written[0], pkt) {
+				t.Errorf("expected PI header stripped, got %x", tun.written[0])
+			}
+		})
 	}
 }
 
-func TestHandleIngress_ShortPacketPadded(t *testing.T) {
-	// Packets shorter than 60 bytes must be zero-padded before writing to TUN.
+func TestHandleIngress_WritesPacketUnpadded(t *testing.T) {
+	// L3 TUN packets must be written as-is: no Ethernet-style minimum-frame padding.
 	tun := newFakeTun()
 	r := NewRouter(tun, &fakeSteam{})
 	pkt := makeIPv4(ip(10, 8, 0, 3), ip(10, 8, 0, 2)) // exactly 20 bytes
@@ -201,8 +244,43 @@ func TestHandleIngress_ShortPacketPadded(t *testing.T) {
 	if len(tun.written) == 0 {
 		t.Fatal("expected write to TUN")
 	}
-	if len(tun.written[0]) < 60 {
-		t.Errorf("expected padded packet >= 60 bytes, got %d", len(tun.written[0]))
+	if !bytes.Equal(tun.written[0], pkt) {
+		t.Errorf("expected packet written unmodified (%d bytes), got %d bytes", len(pkt), len(tun.written[0]))
+	}
+}
+
+func TestHandleIngress_RefusesTablePoisoning(t *testing.T) {
+	tun := newFakeTun()
+	r := NewRouter(tun, &fakeSteam{})
+	srcIP := ip(10, 8, 0, 3)
+	pkt := makeIPv4(srcIP, ip(10, 8, 0, 2))
+
+	r.HandleIngress(77, pkt) // legitimate owner claims 10.8.0.3
+	r.HandleIngress(66, pkt) // different peer tries to claim the same IP
+
+	sid, ok := r.table.Lookup(srcIP)
+	if !ok || sid != 77 {
+		t.Fatalf("table entry hijacked: got (%v,%v), want (77,true)", sid, ok)
+	}
+	tun.mu.Lock()
+	defer tun.mu.Unlock()
+	if len(tun.written) != 1 {
+		t.Errorf("spoofed packet should have been dropped, got %d writes", len(tun.written))
+	}
+}
+
+func TestHandleIngress_SameOwnerRefreshAllowed(t *testing.T) {
+	tun := newFakeTun()
+	r := NewRouter(tun, &fakeSteam{})
+	pkt := makeIPv4(ip(10, 8, 0, 3), ip(10, 8, 0, 2))
+
+	r.HandleIngress(77, pkt)
+	r.HandleIngress(77, pkt) // same peer refreshes its own entry
+
+	tun.mu.Lock()
+	defer tun.mu.Unlock()
+	if len(tun.written) != 2 {
+		t.Errorf("same-owner refresh should pass, got %d writes", len(tun.written))
 	}
 }
 
@@ -239,6 +317,22 @@ func TestFirewall_PortRoundTrip(t *testing.T) {
 	}
 }
 
+func TestGetAllowedPorts_SortedAscending(t *testing.T) {
+	r := NewRouter(newFakeTun(), &fakeSteam{})
+	for _, p := range []uint16{8080, 22, 443, 80, 27015} {
+		r.AddPort(p)
+	}
+	ports := r.GetAllowedPorts()
+	for i := 1; i < len(ports); i++ {
+		if ports[i-1] > ports[i] {
+			t.Fatalf("ports not sorted ascending: %v", ports)
+		}
+	}
+	if len(ports) != 5 {
+		t.Fatalf("expected 5 ports, got %v", ports)
+	}
+}
+
 func TestFirewall_BlocksIngressOnDisallowedPort(t *testing.T) {
 	tun := newFakeTun()
 	r := NewRouter(tun, &fakeSteam{})
@@ -271,17 +365,19 @@ func buildEgressIPv4(dstIP uint32) []byte {
 	pkt[0] = 0x45
 	pkt[9] = 17
 	pkt[12], pkt[13], pkt[14], pkt[15] = 10, 8, 0, 1
-	pkt[16] = byte(dstIP >> 24); pkt[17] = byte(dstIP >> 16)
-	pkt[18] = byte(dstIP >> 8); pkt[19] = byte(dstIP)
+	pkt[16] = byte(dstIP >> 24)
+	pkt[17] = byte(dstIP >> 16)
+	pkt[18] = byte(dstIP >> 8)
+	pkt[19] = byte(dstIP)
 	return pkt
 }
 
-// runEgress feeds one packet, waits for it to be consumed, cancels the ctx,
-// and returns whatever error StartEgress returned.
-func runEgress(r *Router, pkt []byte) error {
+// runEgress feeds the given packets, waits for them to be consumed, cancels
+// the ctx, and returns whatever error StartEgress returned.
+func runEgress(r *Router, pkts ...[]byte) error {
 	ft := r.tunDev.(*fakeTun)
 	ft.mu.Lock()
-	ft.packets = append(ft.packets, pkt)
+	ft.packets = append(ft.packets, pkts...)
 	ft.readIdx = 0
 	ft.done = make(chan struct{})
 	ft.doneOnce = sync.Once{}
@@ -290,8 +386,8 @@ func runEgress(r *Router, pkt []byte) error {
 	ctx, cancel := context.WithCancel(context.Background())
 	errCh := make(chan error, 1)
 	go func() { errCh <- r.StartEgress(ctx) }()
-	<-ft.done  // all scripted packets fed
-	cancel()   // signal shutdown
+	<-ft.done // all scripted packets fed
+	cancel()  // signal shutdown
 	return <-errCh
 }
 
@@ -304,7 +400,7 @@ func TestStartEgress_ReturnsNilOnEOF(t *testing.T) {
 	defer cancel()
 	errCh := make(chan error, 1)
 	go func() { errCh <- r.StartEgress(ctx) }()
-	<-ft.done // fakeTun blocks until unblocked
+	<-ft.done                                 // fakeTun blocks until unblocked
 	ft.doneOnce.Do(func() { close(ft.done) }) // trigger EOF path (already closed by done signal)
 	// Unblock via close event
 	ft.Unblock() //nolint:errcheck
@@ -370,6 +466,48 @@ func TestStartEgress_TableMissSendsToAll(t *testing.T) {
 	defer steam.mu.Unlock()
 	if len(steam.toAll) != 1 {
 		t.Fatalf("expected SendToAll on table miss, got toPeer=%v toAll=%v", steam.toPeer, steam.toAll)
+	}
+}
+
+func TestStartEgress_ShortReadSkipped(t *testing.T) {
+	ft := newFakeTun()
+	steam := &fakeSteam{}
+	r := NewRouter(ft, steam)
+
+	// 10 bytes: no complete IPv4 header, must be skipped.
+	runEgress(r, buildEgressIPv4(ip(10, 8, 0, 3))[:10])
+
+	steam.mu.Lock()
+	defer steam.mu.Unlock()
+	if len(steam.toPeer) != 0 || len(steam.toAll) != 0 {
+		t.Fatalf("short read should be skipped, got toPeer=%v toAll=%v", steam.toPeer, steam.toAll)
+	}
+}
+
+func TestStartEgress_ValidatesOnlyReadBytes(t *testing.T) {
+	// A packet must be judged on its own bytes, not on stale bytes left in the
+	// read buffer by a previous, longer packet.
+	ft := newFakeTun()
+	steam := &fakeSteam{}
+	r := NewRouter(ft, steam)
+	r.SetFirewall(true)
+	r.AddPort(443)
+
+	// First packet: 24 bytes, UDP on allowed port 443 — passes the firewall.
+	allowed := buildEgressIPv4(ip(10, 8, 0, 3))
+	allowed = append(allowed, 0x01, 0xBB, 0x01, 0xBB) // src/dst port 443
+
+	// Second packet: 20 bytes, UDP with no L4 header. With stale bytes from the
+	// first packet the old code saw port 443 and let it through.
+	headerOnly := buildEgressIPv4(ip(10, 8, 0, 3))
+
+	runEgress(r, allowed, headerOnly)
+
+	steam.mu.Lock()
+	defer steam.mu.Unlock()
+	total := len(steam.toPeer) + len(steam.toAll)
+	if total != 1 {
+		t.Fatalf("expected only the first packet to pass the firewall, got %d sends", total)
 	}
 }
 

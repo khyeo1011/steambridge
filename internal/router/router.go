@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/binary"
 	"io"
+	"log"
+	"sort"
 	"steambridge/internal/dpi"
 	"steambridge/internal/protocol"
 	"steambridge/internal/tun"
+	"steambridge/internal/utils"
 	"sync"
 	"sync/atomic"
 )
@@ -19,7 +22,7 @@ type SteamSender interface {
 type Router struct {
 	tunDev          tun.TunInterface
 	steam           SteamSender
-	table           Table
+	table           *Table
 	allowedPorts    sync.Map
 	firewallEnabled atomic.Bool
 }
@@ -28,7 +31,7 @@ func NewRouter(tun tun.TunInterface, steam SteamSender) *Router {
 	return &Router{
 		tunDev:          tun,
 		steam:           steam,
-		table:           *NewTable(),
+		table:           NewTable(),
 		allowedPorts:    sync.Map{},
 		firewallEnabled: atomic.Bool{},
 	}
@@ -54,15 +57,13 @@ func (r *Router) HandleIngress(senderID uint64, packet []byte) {
 	if r.firewallEnabled.Load() && !dpi.IsAllowedPort(packet[offset:], &r.allowedPorts) {
 		return
 	}
-	if len(packet) < 60 {
-		padded := make([]byte, 60)
-		copy(padded, packet)
-		packet = padded
-	}
 	var ip uint32
 	ip = binary.BigEndian.Uint32(packet[offset+12 : offset+16])
-	r.table.Update(ip, senderID)
-	r.tunDev.Write(packet)
+	if !r.table.UpdateIfAbsentOrSame(ip, senderID) {
+		log.Printf("router: refused routing-table poisoning attempt: peer %d claimed %s", senderID, utils.IntIPtoString(ip))
+		return
+	}
+	r.tunDev.Write(packet[offset:])
 }
 
 func (r *Router) StartEgress(ctx context.Context) error {
@@ -76,10 +77,14 @@ func (r *Router) StartEgress(ctx context.Context) error {
 			}
 			return err
 		}
-		if !dpi.IsValidLan(packet[1:]) {
+		if n < 20 {
+			// No complete IPv4 header
 			continue
 		}
-		if r.firewallEnabled.Load() && !dpi.IsAllowedPort(packet[1:], &r.allowedPorts) {
+		if !dpi.IsValidLan(packet[1 : n+1]) {
+			continue
+		}
+		if r.firewallEnabled.Load() && !dpi.IsAllowedPort(packet[1:n+1], &r.allowedPorts) {
 			continue
 		}
 		packet[0] = protocol.PacketTypeData
@@ -89,9 +94,6 @@ func (r *Router) StartEgress(ctx context.Context) error {
 		// payload[0] = PacketTypeData tag, payload[1:] = raw IPv4 packet.
 		// IPv4 destination address is at header offset 16 (bytes 16–19).
 		const tagLen = 1
-		if len(payload) < tagLen+20 {
-			continue
-		}
 		var destIP uint32
 		destIP = binary.BigEndian.Uint32(payload[tagLen+16 : tagLen+20])
 
@@ -142,6 +144,7 @@ func (r *Router) GetAllowedPorts() []uint16 {
 		ports = append(ports, key.(uint16))
 		return true
 	})
+	sort.Slice(ports, func(i, j int) bool { return ports[i] < ports[j] })
 	return ports
 }
 
