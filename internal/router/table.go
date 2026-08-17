@@ -20,6 +20,19 @@ func (t *Table) Update(ip uint32, steamID uint64) {
 	t.table[ip] = steamID
 }
 
+// UpdateIfAbsentOrSame maps ip to steamID only if the ip is unclaimed or
+// already owned by steamID. It reports whether the update was applied,
+// returning false when another peer already owns the ip.
+func (t *Table) UpdateIfAbsentOrSame(ip uint32, steamID uint64) bool {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+	if owner, ok := t.table[ip]; ok && owner != steamID {
+		return false
+	}
+	t.table[ip] = steamID
+	return true
+}
+
 func (t *Table) Lookup(ip uint32) (uint64, bool) {
 	t.mutex.RLock()
 	defer t.mutex.RUnlock()
