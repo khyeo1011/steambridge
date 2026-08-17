@@ -38,6 +38,9 @@ const defaultStatus: StatusPayload = {
   peerCount: 0,
 }
 
+const errorMessage = (err: unknown): string =>
+  err instanceof Error ? err.message : String(err)
+
 const Home: NextPage = () => {
   const [status, setStatus] = useState<StatusPayload>(defaultStatus)
   const [peers, setPeers] = useState<PeerInfo[]>([])
@@ -47,6 +50,7 @@ const Home: NextPage = () => {
   const [connections, setConnections] = useState<Record<string, 'pending' | 'awaiting' | 'connected' | 'failed'>>({})
   const [copiedIP, setCopiedIP] = useState(false)
   const [copiedSteamID, setCopiedSteamID] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     const [s, p, fw, ports] = await Promise.all([
@@ -108,17 +112,29 @@ const Home: NextPage = () => {
 
   const handleStart = async () => {
     setBusy(true)
-    await app.StartBridge()
-    await refresh()
-    setBusy(false)
+    setError(null)
+    try {
+      await app.StartBridge()
+      await refresh()
+    } catch (err) {
+      setError(`Failed to start bridge: ${errorMessage(err)}`)
+    } finally {
+      setBusy(false)
+    }
   }
 
   const handleStop = async () => {
     setBusy(true)
-    await app.StopBridge()
-    setConnections({})
-    await refresh()
-    setBusy(false)
+    setError(null)
+    try {
+      await app.StopBridge()
+      setConnections({})
+      await refresh()
+    } catch (err) {
+      setError(`Failed to stop bridge: ${errorMessage(err)}`)
+    } finally {
+      setBusy(false)
+    }
   }
 
   const handleRespond = async (steamID: string, accept: boolean) => {
@@ -145,9 +161,17 @@ const Home: NextPage = () => {
   }
 
   const handleToggleFirewall = async () => {
-    const next = !firewallEnabled
+    const prev = firewallEnabled
+    const next = !prev
     setFirewallEnabled(next)
-    await app.ToggleFirewall(next)
+    setError(null)
+    try {
+      await app.ToggleFirewall(next)
+    } catch (err) {
+      // Roll back the optimistic update so the switch matches the bridge.
+      setFirewallEnabled(prev)
+      setError(`Failed to ${next ? 'enable' : 'disable'} firewall: ${errorMessage(err)}`)
+    }
   }
 
   const handleAddPort = async (port: number) => {
@@ -181,6 +205,20 @@ const Home: NextPage = () => {
       </Head>
 
       <Header running={status.running} />
+
+      {error && (
+        <div className={styles.errorBanner} role="alert">
+          <span>{error}</span>
+          <button
+            className={styles.errorDismiss}
+            onClick={() => setError(null)}
+            aria-label="Dismiss error"
+            title="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       <div className={styles.dashboard}>
         <div className={styles.leftCol}>

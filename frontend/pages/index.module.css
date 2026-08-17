@@ -305,6 +305,40 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+.errorBanner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.8rem;
+  color: #fb7185;
+  background: rgba(244, 63, 94, 0.1);
+  border: 1px solid rgba(244, 63, 94, 0.2);
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  animation: fadeIn 0.25s ease-out;
+}
+
+.errorDismiss {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 0;
+  opacity: 0.7;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.errorDismiss:hover {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
 .friendsLayout {
   display: flex;
   flex-direction: column;

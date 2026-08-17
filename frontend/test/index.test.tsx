@@ -2,7 +2,7 @@
 import { render, screen, fireEvent, act, waitFor, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import Home from '../pages/index'
-import { resetMock } from '../lib/mock'
+import { resetMock, mockApp } from '../lib/mock'
 
 // Mock Wails-only modules â€” never actually called since isWails() is false
 // in jsdom (window.go is absent).
@@ -41,6 +41,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  vi.restoreAllMocks()
 })
 
 async function renderHome() {
@@ -123,5 +124,81 @@ describe('Dashboard - manual join flow', () => {
       { timeout: 3000 }
     )
   }, 5000)
+})
+
+describe('Dashboard - start/stop error handling', () => {
+  it('shows an error and re-enables the button when StartBridge fails', async () => {
+    vi.spyOn(mockApp, 'StartBridge').mockRejectedValueOnce(new Error('steam not running'))
+    await renderHome()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start bridge/i }))
+      await flushPromises()
+    })
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed to start bridge: steam not running')
+    // busy must reset so the button is usable again
+    expect(screen.getByRole('button', { name: /start bridge/i })).not.toBeDisabled()
+  })
+
+  it('shows an error and re-enables the button when StopBridge fails', async () => {
+    await renderHome()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start bridge/i }))
+      await flushPromises()
+    })
+
+    vi.spyOn(mockApp, 'StopBridge').mockRejectedValueOnce(new Error('bridge stuck'))
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /stop bridge/i }))
+      await flushPromises()
+    })
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed to stop bridge: bridge stuck')
+    expect(screen.getByRole('button', { name: /stop bridge/i })).not.toBeDisabled()
+  })
+
+  it('dismisses the error banner when the dismiss button is clicked', async () => {
+    vi.spyOn(mockApp, 'StartBridge').mockRejectedValueOnce(new Error('boom'))
+    await renderHome()
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start bridge/i }))
+      await flushPromises()
+    })
+    expect(screen.getByRole('alert')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /dismiss error/i }))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('Dashboard - firewall toggle rollback', () => {
+  it('rolls back the switch and shows an error when ToggleFirewall fails', async () => {
+    vi.spyOn(mockApp, 'ToggleFirewall').mockRejectedValueOnce(new Error('permission denied'))
+    await renderHome()
+
+    const toggle = screen.getByRole('checkbox')
+    expect(toggle).not.toBeChecked()
+
+    await act(async () => {
+      fireEvent.click(toggle)
+      await flushPromises()
+    })
+
+    expect(toggle).not.toBeChecked()
+    expect(screen.getByRole('alert')).toHaveTextContent('Failed to enable firewall: permission denied')
+  })
+
+  it('keeps the switch state when ToggleFirewall succeeds', async () => {
+    await renderHome()
+
+    const toggle = screen.getByRole('checkbox')
+    await act(async () => {
+      fireEvent.click(toggle)
+      await flushPromises()
+    })
+
+    expect(toggle).toBeChecked()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
 })
 
