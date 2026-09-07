@@ -60,6 +60,16 @@ jobs:
     - name: Setup CMake
       uses: jwlawson/actions-setup-cmake@v2
 
+    - name: Build & Run C++ Bridge Unit Tests
+      # Compiles against a fake Steam SDK (cbridge/tests/fake_steam_sdk), so
+      # this needs neither the decrypted SDK above nor a live Steam client.
+      shell: bash
+      run: |
+        cd cbridge
+        cmake -B build-tests -S . -DSTEAMBRIDGE_BUILD_TESTS=ON
+        cmake --build build-tests --target steam_bridge_tests --config Release
+        ctest --test-dir build-tests --output-on-failure -C Release
+
     - name: Build C++ Bridge (Linux)
       if: runner.os == 'Linux'
       run: |
