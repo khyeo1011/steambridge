@@ -21,7 +21,7 @@ void FakeSteam_Reset();
 // -- Local identity --
 void FakeSteam_SetLocalSteamID(uint64_t steamId);
 
-// -- P2P networking --
+// -- Networking (ISteamNetworkingMessages) --
 void FakeSteam_QueueIncomingPacket(uint64_t fromSteamId, const uint8_t* data, size_t size);
 size_t FakeSteam_PendingIncomingPacketCount();
 void FakeSteam_SetSendShouldFail(bool shouldFail);
@@ -33,5 +33,5 @@ const std::string& FakeSteam_GetRichPresence();
 bool FakeSteam_WasOverlayActivated();
 
 // -- Callbacks: queue a fake event, delivered on the next Bridge_RunCallbacks() --
-void FakeSteam_TriggerP2PSessionRequest(uint64_t remoteSteamId);
+void FakeSteam_TriggerSessionRequest(uint64_t remoteSteamId);
 void FakeSteam_TriggerJoinRequested(uint64_t friendSteamId);

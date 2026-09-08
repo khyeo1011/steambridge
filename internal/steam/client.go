@@ -235,6 +235,7 @@ func (c *Client) SendToAll(frame []byte) {
 func (c *Client) ReadLoop(ctx context.Context) error {
 	// Allocate a buffer slightly larger than standard Ethernet MTU (1500)
 	buffer := make([]byte, 2048)
+	var backoff idleBackoff
 
 	for {
 		select {
@@ -268,7 +269,7 @@ func (c *Client) ReadLoop(ctx context.Context) error {
 			bytesRead := bridgeReceive(&buffer[0], len(buffer), &remoteSteamID)
 
 			if bytesRead == 0 {
-				time.Sleep(time.Millisecond) // Don't peg the CPU at 100%
+				backoff.idle(ctx) // poll fast under load, back off when idle
 				continue
 			} else if bytesRead < 0 {
 				// The bridge reserves negative returns for genuinely fatal
@@ -276,6 +277,7 @@ func (c *Client) ReadLoop(ctx context.Context) error {
 				// reported as 0), so tearing down the read loop is correct.
 				return fmt.Errorf("bridge receive returned fatal error %d", bytesRead)
 			}
+			backoff.gotPacket()
 			log.Printf("Steam Received %d bytes from %v", bytesRead, remoteSteamID)
 			packetCopy := make([]byte, bytesRead)
 			copy(packetCopy, buffer[:bytesRead])

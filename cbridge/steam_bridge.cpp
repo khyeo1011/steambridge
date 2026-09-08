@@ -1,15 +1,28 @@
 #include "steam_bridge.h"
 #include <steam/steam_api.h>
 #include <steam/steam_api_flat.h>
+#include <steam/isteamnetworkingmessages.h>
 #include <atomic>
+#include <cstring>
 #include <mutex>
 #include <queue>
+
+// All bridge traffic rides a single ISteamNetworkingMessages channel. The
+// protocol carries its own packet-type byte, so we don't need Steam's channel
+// routing.
+static constexpr int kBridgeChannel = 0;
+
+static SteamNetworkingIdentity IdentityFromSteamID(uint64_t steamId) {
+    SteamNetworkingIdentity id;
+    id.SetSteamID64(steamId);
+    return id;
+}
 
 // SteamID of a friend whose "Join Game" we received but haven't acted on yet.
 // Go drains this once per ReadLoop iteration via Bridge_GetJoinRequest().
 std::atomic<uint64_t> g_pendingJoin{0};
 
-// Queue of incoming P2P session requests. Go drains this and decides
+// Queue of incoming session requests. Go drains this and decides
 // accept/reject; C++ never auto-accepts so Go owns the security policy.
 std::queue<uint64_t> g_sessionRequests;
 std::mutex g_sessionMutex;
@@ -17,18 +30,20 @@ std::mutex g_sessionMutex;
 class BridgeCallbacks {
 public:
     BridgeCallbacks()
-        : m_CallbackP2PSessionRequest(this, &BridgeCallbacks::OnP2PSessionRequest),
+        : m_CallbackSessionRequest(this, &BridgeCallbacks::OnSessionRequest),
           m_CallbackJoinRequested(this, &BridgeCallbacks::OnGameRichPresenceJoinRequested) {}
 
-    STEAM_CALLBACK(BridgeCallbacks, OnP2PSessionRequest, P2PSessionRequest_t, m_CallbackP2PSessionRequest);
+    STEAM_CALLBACK(BridgeCallbacks, OnSessionRequest, SteamNetworkingMessagesSessionRequest_t, m_CallbackSessionRequest);
     STEAM_CALLBACK(BridgeCallbacks, OnGameRichPresenceJoinRequested, GameRichPresenceJoinRequested_t, m_CallbackJoinRequested);
 };
 
-void BridgeCallbacks::OnP2PSessionRequest(P2PSessionRequest_t *pCallback) {
+void BridgeCallbacks::OnSessionRequest(SteamNetworkingMessagesSessionRequest_t *pCallback) {
     // Do NOT auto-accept. Queue the request; Go will call Bridge_AcceptSession
-    // or Bridge_RejectSession after applying the friend-gate policy.
+    // or Bridge_RejectSession after applying the friend-gate policy. Steam
+    // re-posts this callback periodically while the peer keeps trying, so the
+    // same SteamID may be enqueued more than once — Go's peer map dedupes.
     std::lock_guard<std::mutex> lock(g_sessionMutex);
-    g_sessionRequests.push(pCallback->m_steamIDRemote.ConvertToUint64());
+    g_sessionRequests.push(pCallback->m_identityRemote.GetSteamID64());
 }
 
 void BridgeCallbacks::OnGameRichPresenceJoinRequested(GameRichPresenceJoinRequested_t *pCallback) {
@@ -58,41 +73,40 @@ BRIDGE_EXPORT void Bridge_Shutdown() {
 }
 
 BRIDGE_EXPORT bool Bridge_Send(uint64_t steamId, const uint8_t* data, int size) {
-    CSteamID remoteSteamID((uint64)steamId);
-    return SteamNetworking()->SendP2PPacket(remoteSteamID, data, size, k_EP2PSendUnreliable);
+    SteamNetworkingIdentity id = IdentityFromSteamID(steamId);
+    EResult res = SteamNetworkingMessages()->SendMessageToUser(
+        id, data, (uint32)size, k_nSteamNetworkingSend_Unreliable, kBridgeChannel);
+    return res == k_EResultOK;
 }
 
 BRIDGE_EXPORT bool Bridge_SendReliable(uint64_t steamId, const uint8_t* data, int size) {
-    CSteamID remoteSteamID((uint64)steamId);
-    return SteamNetworking()->SendP2PPacket(remoteSteamID, data, size, k_EP2PSendReliable);
+    SteamNetworkingIdentity id = IdentityFromSteamID(steamId);
+    EResult res = SteamNetworkingMessages()->SendMessageToUser(
+        id, data, (uint32)size, k_nSteamNetworkingSend_Reliable, kBridgeChannel);
+    return res == k_EResultOK;
 }
 
 BRIDGE_EXPORT int Bridge_Receive(uint8_t* buffer, int bufferSize, uint64_t * outSteamIDRemote) {
-    uint32_t msgSize;
-    if (!SteamNetworking()->IsP2PPacketAvailable(&msgSize, 0)) {
-        return 0; 
-    }
-    if (msgSize > (uint32_t)bufferSize) {
-        // Message is too large for the caller's buffer. Read-and-discard it so
-        // it doesn't sit at the head of the queue forever, and return 0 (no
-        // packet delivered). Returning -1 here would let any peer tear down the
-        // whole bridge with a single oversized message; -1 is reserved for
-        // genuinely fatal states.
-        uint8_t* discard = new uint8_t[msgSize];
-        uint32_t discardedBytes;
-        CSteamID discardSender;
-        SteamNetworking()->ReadP2PPacket(discard, msgSize, &discardedBytes, &discardSender, 0);
-        delete[] discard;
+    SteamNetworkingMessage_t* msg = nullptr;
+    int received = SteamNetworkingMessages()->ReceiveMessagesOnChannel(kBridgeChannel, &msg, 1);
+    if (received <= 0) {
         return 0;
     }
-    CSteamID remoteSteamID;
-    uint32_t bytesRead;
-    if (SteamNetworking()->ReadP2PPacket(buffer, bufferSize, &bytesRead, &remoteSteamID, 0)) {
-        *outSteamIDRemote = remoteSteamID.ConvertToUint64();
-        return bytesRead;
-    } else {
+
+    int msgSize = msg->m_cbSize;
+    if (msgSize > bufferSize) {
+        // Message is too large for the caller's buffer. Drop it and report 0
+        // (no packet delivered) rather than truncating or tearing down the
+        // bridge — matches the old ISteamNetworking behaviour. The new API
+        // still allows messages far larger than our Ethernet-sized buffer.
+        msg->Release();
         return 0;
     }
+
+    std::memcpy(buffer, msg->m_pData, msgSize);
+    *outSteamIDRemote = msg->m_identityPeer.GetSteamID64();
+    msg->Release();
+    return msgSize;
 }
 
 BRIDGE_EXPORT void Bridge_RunCallbacks() {
@@ -116,7 +130,7 @@ BRIDGE_EXPORT void Bridge_OpenFriendsOverlay() {
     SteamFriends()->ActivateGameOverlay("friends");
 }
 
-// Pops one pending P2P session request SteamID; returns 0 if none queued.
+// Pops one pending session request SteamID; returns 0 if none queued.
 BRIDGE_EXPORT uint64_t Bridge_GetSessionRequest() {
     std::lock_guard<std::mutex> lock(g_sessionMutex);
     if (g_sessionRequests.empty()) return 0;
@@ -131,14 +145,14 @@ BRIDGE_EXPORT bool Bridge_IsFriend(uint64_t steamId) {
     return SteamFriends()->GetFriendRelationship(id) == k_EFriendRelationshipFriend;
 }
 
-// Accepts a pending P2P session from steamId (call after host approves).
+// Accepts a pending session from steamId (call after host approves).
 BRIDGE_EXPORT void Bridge_AcceptSession(uint64_t steamId) {
-    CSteamID id((uint64)steamId);
-    SteamNetworking()->AcceptP2PSessionWithUser(id);
+    SteamNetworkingIdentity id = IdentityFromSteamID(steamId);
+    SteamNetworkingMessages()->AcceptSessionWithUser(id);
 }
 
-// Rejects a pending P2P session from steamId (call after host denies).
+// Rejects a pending session from steamId (call after host denies).
 BRIDGE_EXPORT void Bridge_RejectSession(uint64_t steamId) {
-    CSteamID id((uint64)steamId);
-    SteamNetworking()->CloseP2PSessionWithUser(id);
+    SteamNetworkingIdentity id = IdentityFromSteamID(steamId);
+    SteamNetworkingMessages()->CloseSessionWithUser(id);
 }
