@@ -38,7 +38,7 @@ SteamBridge is a high-performance, custom Layer 3 virtual tunneling application 
 | `internal/dpi` | Stateless Layer 3/4 packet inspection — validates RFC1918 sources, port filtering |
 | `internal/ipam` | IP lease pool — assigns `10.8.0.x` addresses to connected peers |
 | `internal/protocol` | 6-byte binary control protocol for IPAM handshake |
-| `cbridge/` | C++ Steamworks shim (`ISteamNetworkingSockets` P2P, `ISteamFriends` rich presence / join callbacks) |
+| `cbridge/` | C++ Steamworks shim (`ISteamNetworkingMessages` P2P, `ISteamFriends` rich presence / join callbacks) |
 | `frontend/` | Wails-rendered Next.js dashboard — live status, peer table, firewall and join controls |
 
 ### Data Flow
@@ -51,7 +51,7 @@ SteamBridge is a high-performance, custom Layer 3 virtual tunneling application 
 5. `Client.SendToPeer()` or `SendToAll()` transmits via Steamworks P2P
 
 **Ingress (Remote Peer --> OS):**
-1. `Client.ReadLoop()` polls `Bridge_Receive()` for incoming P2P packets
+1. `Client.ReadLoop()` polls `Bridge_Receive()` for incoming P2P packets — adaptive backoff keeps the loop hot under load and idles down to 32 ms between polls when quiet
 2. Control messages (IPAM handshake) handled in ReadLoop switch
 3. Data packets validated by DPI, source IP updated in NAT table, written to TUN device
 
@@ -140,6 +140,7 @@ and the frontend (`vitest`), all wired into CI.
 - [ ] **Reconnect** — no automatic re-join after a transient Steam P2P drop
 
 ### Phase 3: Architecture Improvements
+- [x] **Steam networking API migration** — legacy P2P `ISteamNetworking` → `ISteamNetworkingMessages`; `ReadLoop`'s flat 1 ms poll replaced with adaptive backoff (#58)
 - [ ] **Platform abstraction layer** — IP config still shells out to `sudo ip` (Linux) / `netsh` (Windows); replace with native Go (`netlink`)
 - [x] **Testable facade** — package-level function pointers replaced by the `facade.Facade` struct (the `internal/steam` bridge still uses `purego`-bound function vars)
 - [ ] **IPv6 support** — currently silently dropped by the DPI layer
