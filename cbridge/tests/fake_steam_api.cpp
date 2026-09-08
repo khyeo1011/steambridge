@@ -49,47 +49,51 @@ PendingEvent MakeEvent(int callbackId, const T& data) {
     return ev;
 }
 
-class FakeSteamNetworking : public ISteamNetworking {
+// Frees a message handed out by ReceiveMessagesOnChannel. Mirrors the real
+// SDK contract: the caller owns the message until it calls Release().
+void FreeFakeMessage(SteamNetworkingMessage_t* msg) {
+    delete[] static_cast<uint8_t*>(msg->m_pData);
+    delete msg;
+}
+
+class FakeSteamNetworkingMessages : public ISteamNetworkingMessages {
 public:
-    bool SendP2PPacket(CSteamID steamIDRemote, const void* pubData, uint32 cubData, EP2PSend eP2PSendType, int) override {
+    EResult SendMessageToUser(const SteamNetworkingIdentity& identityRemote, const void* pubData, uint32 cubData, int nSendFlags, int) override {
         auto& s = State();
         std::lock_guard<std::mutex> lock(s.mutex);
-        if (s.sendShouldFail) return false;
+        if (s.sendShouldFail) return 2;  // any non-OK EResult
         FakeSentPacket p;
-        p.toSteamId = steamIDRemote.ConvertToUint64();
+        p.toSteamId = identityRemote.GetSteamID64();
         const uint8_t* bytes = static_cast<const uint8_t*>(pubData);
         p.data.assign(bytes, bytes + cubData);
-        p.reliable = (eP2PSendType == k_EP2PSendReliable);
+        p.reliable = (nSendFlags & k_nSteamNetworkingSend_Reliable) != 0;
         s.sentPackets.push_back(std::move(p));
-        return true;
+        return k_EResultOK;
     }
 
-    bool IsP2PPacketAvailable(uint32* pcubMsgSize, int) override {
+    int ReceiveMessagesOnChannel(int, SteamNetworkingMessage_t** ppOutMessages, int nMaxMessages) override {
         auto& s = State();
         std::lock_guard<std::mutex> lock(s.mutex);
-        if (s.incomingPackets.empty()) return false;
-        *pcubMsgSize = static_cast<uint32>(s.incomingPackets.front().data.size());
-        return true;
-    }
+        if (nMaxMessages <= 0 || s.incomingPackets.empty()) return 0;
 
-    bool ReadP2PPacket(void* pubDest, uint32 cubDest, uint32* pcubMsgSize, CSteamID* psteamIDRemote, int) override {
-        auto& s = State();
-        std::lock_guard<std::mutex> lock(s.mutex);
-        if (s.incomingPackets.empty()) {
-            *pcubMsgSize = 0;
-            return false;
-        }
         QueuedPacket pkt = std::move(s.incomingPackets.front());
         s.incomingPackets.pop_front();
-        uint32 n = static_cast<uint32>(std::min<size_t>(cubDest, pkt.data.size()));
-        std::memcpy(pubDest, pkt.data.data(), n);
-        *pcubMsgSize = n;
-        *psteamIDRemote = CSteamID(pkt.fromSteamId);
-        return true;
+
+        auto* msg = new SteamNetworkingMessage_t();
+        auto* buf = new uint8_t[pkt.data.size()];
+        std::memcpy(buf, pkt.data.data(), pkt.data.size());
+        msg->m_pData = buf;
+        msg->m_cbSize = static_cast<int>(pkt.data.size());
+        msg->m_identityPeer.SetSteamID64(pkt.fromSteamId);
+        msg->m_nChannel = 0;
+        msg->m_pfnRelease = &FreeFakeMessage;
+
+        ppOutMessages[0] = msg;
+        return 1;
     }
 
-    bool AcceptP2PSessionWithUser(CSteamID) override { return true; }
-    bool CloseP2PSessionWithUser(CSteamID) override { return true; }
+    bool AcceptSessionWithUser(const SteamNetworkingIdentity&) override { return true; }
+    bool CloseSessionWithUser(const SteamNetworkingIdentity&) override { return true; }
 };
 
 class FakeSteamUser : public ISteamUser {};
@@ -115,7 +119,7 @@ public:
     }
 };
 
-FakeSteamNetworking g_networking;
+FakeSteamNetworkingMessages g_networkingMessages;
 FakeSteamUser g_user;
 FakeSteamFriends g_friends;
 
@@ -138,7 +142,7 @@ void SteamAPI_RunCallbacks() {
     }
 }
 
-ISteamNetworking* SteamNetworking() { return &g_networking; }
+ISteamNetworkingMessages* SteamNetworkingMessages() { return &g_networkingMessages; }
 ISteamUser* SteamUser() { return &g_user; }
 ISteamFriends* SteamFriends() { return &g_friends; }
 
@@ -200,11 +204,11 @@ bool FakeSteam_WasOverlayActivated() {
     return State().overlayActivated;
 }
 
-void FakeSteam_TriggerP2PSessionRequest(uint64_t remoteSteamId) {
-    P2PSessionRequest_t evData{};
-    evData.m_steamIDRemote = CSteamID(remoteSteamId);
+void FakeSteam_TriggerSessionRequest(uint64_t remoteSteamId) {
+    SteamNetworkingMessagesSessionRequest_t evData{};
+    evData.m_identityRemote.SetSteamID64(remoteSteamId);
     std::lock_guard<std::mutex> lock(State().mutex);
-    State().pendingEvents.push_back(MakeEvent(P2PSessionRequest_t::k_iCallback, evData));
+    State().pendingEvents.push_back(MakeEvent(SteamNetworkingMessagesSessionRequest_t::k_iCallback, evData));
 }
 
 void FakeSteam_TriggerJoinRequested(uint64_t friendSteamId) {

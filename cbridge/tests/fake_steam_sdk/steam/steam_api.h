@@ -28,21 +28,45 @@ private:
     uint64 m_id;
 };
 
-enum EP2PSend {
-    k_EP2PSendUnreliable = 0,
-    k_EP2PSendUnreliableNoDelay = 1,
-    k_EP2PSendReliable = 2,
-    k_EP2PSendReliableWithBuffering = 3,
-};
-
 enum EFriendRelationship {
     k_EFriendRelationshipNone = 0,
     k_EFriendRelationshipFriend = 3,
 };
 
-struct P2PSessionRequest_t {
-    enum { k_iCallback = 1 };
-    CSteamID m_steamIDRemote;
+// --- ISteamNetworkingMessages types --------------------------------------
+//
+// Only the members steam_bridge.cpp touches are modelled.
+
+typedef int EResult;
+const EResult k_EResultOK = 1;
+
+// Bitmask flags for SendMessageToUser (real SDK values).
+const int k_nSteamNetworkingSend_Unreliable = 0;
+const int k_nSteamNetworkingSend_Reliable = 8;
+
+class SteamNetworkingIdentity {
+public:
+    void SetSteamID64(uint64 steamId) { m_steamId = steamId; }
+    uint64 GetSteamID64() const { return m_steamId; }
+private:
+    uint64 m_steamId = 0;
+};
+
+struct SteamNetworkingMessage_t {
+    void* m_pData = nullptr;
+    int m_cbSize = 0;
+    SteamNetworkingIdentity m_identityPeer;
+    int m_nChannel = 0;
+    void (*m_pfnRelease)(SteamNetworkingMessage_t*) = nullptr;
+
+    void Release() {
+        if (m_pfnRelease) m_pfnRelease(this);
+    }
+};
+
+struct SteamNetworkingMessagesSessionRequest_t {
+    enum { k_iCallback = 1251 };
+    SteamNetworkingIdentity m_identityRemote;
 };
 
 struct GameRichPresenceJoinRequested_t {
@@ -96,20 +120,19 @@ private:
 
 // Matches the real macro's shape: it declares both the CCallback member
 // AND the handler method (defined out-of-line by the caller), which is why
-// steam_bridge.cpp can write BridgeCallbacks::OnP2PSessionRequest(...) below
+// steam_bridge.cpp can write BridgeCallbacks::OnSessionRequest(...) below
 // without a separate method declaration in the class body.
 #define STEAM_CALLBACK(thisclass, func, param, var) CCallback<thisclass, param> var; void func(param *pParam)
 
 // --- Interfaces used by steam_bridge.cpp ------------------------------------
 
-class ISteamNetworking {
+class ISteamNetworkingMessages {
 public:
-    virtual bool SendP2PPacket(CSteamID steamIDRemote, const void* pubData, uint32 cubData, EP2PSend eP2PSendType, int nChannel = 0) = 0;
-    virtual bool IsP2PPacketAvailable(uint32* pcubMsgSize, int nChannel = 0) = 0;
-    virtual bool ReadP2PPacket(void* pubDest, uint32 cubDest, uint32* pcubMsgSize, CSteamID* psteamIDRemote, int nChannel = 0) = 0;
-    virtual bool AcceptP2PSessionWithUser(CSteamID steamIDRemote) = 0;
-    virtual bool CloseP2PSessionWithUser(CSteamID steamIDRemote) = 0;
-    virtual ~ISteamNetworking() = default;
+    virtual EResult SendMessageToUser(const SteamNetworkingIdentity& identityRemote, const void* pubData, uint32 cubData, int nSendFlags, int nRemoteChannel) = 0;
+    virtual int ReceiveMessagesOnChannel(int nLocalChannel, SteamNetworkingMessage_t** ppOutMessages, int nMaxMessages) = 0;
+    virtual bool AcceptSessionWithUser(const SteamNetworkingIdentity& identityRemote) = 0;
+    virtual bool CloseSessionWithUser(const SteamNetworkingIdentity& identityRemote) = 0;
+    virtual ~ISteamNetworkingMessages() = default;
 };
 
 class ISteamUser {
@@ -129,6 +152,6 @@ bool SteamAPI_Init();
 void SteamAPI_Shutdown();
 void SteamAPI_RunCallbacks();
 
-ISteamNetworking* SteamNetworking();
+ISteamNetworkingMessages* SteamNetworkingMessages();
 ISteamUser* SteamUser();
 ISteamFriends* SteamFriends();

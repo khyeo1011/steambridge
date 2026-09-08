@@ -118,7 +118,7 @@ TEST_F(BridgeTest, OpenFriendsOverlayActivatesOverlay) {
 TEST_F(BridgeTest, SessionRequestIsQueuedThenDrainedOnce) {
     EXPECT_EQ(Bridge_GetSessionRequest(), 0u);
 
-    FakeSteam_TriggerP2PSessionRequest(321);
+    FakeSteam_TriggerSessionRequest(321);
     Bridge_RunCallbacks();
 
     EXPECT_EQ(Bridge_GetSessionRequest(), 321u);
@@ -135,7 +135,7 @@ TEST_F(BridgeTest, AcceptAndRejectSessionDoNotCrash) {
 
 TEST_F(BridgeTest, ShutdownClearsPendingJoinAndSessionRequests) {
     FakeSteam_TriggerJoinRequested(11);
-    FakeSteam_TriggerP2PSessionRequest(22);
+    FakeSteam_TriggerSessionRequest(22);
     Bridge_RunCallbacks();
 
     Bridge_Shutdown();
