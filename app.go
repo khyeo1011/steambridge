@@ -18,8 +18,13 @@ type StatusPayload struct {
 }
 
 type PeerInfo struct {
-	SteamID string `json:"steamID"`
-	IP      string `json:"ip"`
+	SteamID        string  `json:"steamID"`
+	IP             string  `json:"ip"`
+	PingMs         int32   `json:"pingMs"`
+	Relayed        bool    `json:"relayed"`
+	BytesInPerSec  float32 `json:"bytesInPerSec"`
+	BytesOutPerSec float32 `json:"bytesOutPerSec"`
+	StatsAvailable bool    `json:"statsAvailable"`
 }
 
 // App struct
@@ -107,9 +112,15 @@ func (a *App) GetPeers() []PeerInfo {
 	table := a.facade.GetPeerTable()
 	peers := make([]PeerInfo, 0, len(table))
 	for ip, steamID := range table {
+		stats, ok := a.facade.GetPeerStats(steamID)
 		peers = append(peers, PeerInfo{
-			SteamID: fmt.Sprintf("%d", steamID),
-			IP:      utils.IntIPtoString(ip),
+			SteamID:        fmt.Sprintf("%d", steamID),
+			IP:             utils.IntIPtoString(ip),
+			PingMs:         stats.PingMs,
+			Relayed:        stats.Relayed,
+			BytesInPerSec:  stats.BytesInPerSec,
+			BytesOutPerSec: stats.BytesOutPerSec,
+			StatsAvailable: ok,
 		})
 	}
 	return peers

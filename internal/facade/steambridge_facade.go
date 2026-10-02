@@ -281,3 +281,12 @@ func (f *Facade) GetAllowedPorts() []uint16 {
 	}
 	return f.router.GetAllowedPorts()
 }
+
+// GetPeerStats reports live connection quality for steamID. ok is false if
+// the bridge isn't running or there's no active session with steamID.
+func (f *Facade) GetPeerStats(steamID uint64) (steam.PeerStats, bool) {
+	if f.client == nil {
+		return steam.PeerStats{}, false
+	}
+	return f.client.GetPeerStats(steamID)
+}

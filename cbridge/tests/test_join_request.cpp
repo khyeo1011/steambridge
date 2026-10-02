@@ -14,7 +14,7 @@
 namespace {
 
 class JoinRequestTest : public ::testing::Test {
-protected:
+ protected:
   void SetUp() override {
     FakeSteam_Reset();
     ASSERT_TRUE(Bridge_Init());
@@ -49,16 +49,16 @@ TEST_F(JoinRequestTest, ExchangeClearsPendingValue) {
 // Claims a fresh, globally-unique id per iteration and drives it through the
 // real callback path (FakeSteam_TriggerJoinRequested + Bridge_RunCallbacks),
 // exactly like a live join-request callback firing.
-void Producer_Loop(int iterations, std::atomic<uint64_t> *counter,
-                    std::mutex *cv_m, std::condition_variable *cv,
-                    bool *start) {
+void Producer_Loop(int iterations, std::atomic<uint64_t>* counter,
+                   std::mutex* cv_m, std::condition_variable* cv, bool* start) {
   {
     std::unique_lock<std::mutex> lock(*cv_m);
     cv->wait(lock, [start] { return *start; });
   }
 
   for (int i = 0; i < iterations; i++) {
-    uint64_t id = (*counter)++;  // atomic post-increment: old value is ours alone
+    uint64_t id =
+        (*counter)++;  // atomic post-increment: old value is ours alone
     FakeSteam_TriggerJoinRequested(id);
     Bridge_RunCallbacks();
   }
@@ -66,9 +66,9 @@ void Producer_Loop(int iterations, std::atomic<uint64_t> *counter,
 
 // Polls Bridge_GetJoinRequest() and records every non-zero value it sees
 // into a shared, mutex-guarded vector for the assertions below.
-void Consumer_Loop(int iterations, std::mutex *cv_m,
-                    std::condition_variable *cv, bool *start,
-                    std::mutex *results_m, std::vector<uint64_t> *results) {
+void Consumer_Loop(int iterations, std::mutex* cv_m,
+                   std::condition_variable* cv, bool* start,
+                   std::mutex* results_m, std::vector<uint64_t>* results) {
   {
     std::unique_lock<std::mutex> lock(*cv_m);
     cv->wait(lock, [start] { return *start; });
@@ -102,12 +102,12 @@ TEST_F(JoinRequestTest, ConcurrentJoinRequestsAreNeverTornOrDuplicated) {
   // g_pendingJoin, instead of finishing serially in creation order.
   std::vector<std::thread> threads;
   for (int i = 0; i < kNumProducers; i++) {
-    threads.emplace_back(Producer_Loop, kIterationsPerProducer, &counter,
-                          &cv_m, &cv, &start);
+    threads.emplace_back(Producer_Loop, kIterationsPerProducer, &counter, &cv_m,
+                         &cv, &start);
   }
   for (int i = 0; i < kNumConsumers; i++) {
     threads.emplace_back(Consumer_Loop, kIterationsPerConsumer, &cv_m, &cv,
-                          &start, &results_m, &results);
+                         &start, &results_m, &results);
   }
 
   {
@@ -116,7 +116,7 @@ TEST_F(JoinRequestTest, ConcurrentJoinRequestsAreNeverTornOrDuplicated) {
   }
   cv.notify_all();
 
-  for (auto &t : threads) t.join();
+  for (auto& t : threads) t.join();
 
   const uint64_t kMaxId = kBaseId + kNumProducers * kIterationsPerProducer;
 
