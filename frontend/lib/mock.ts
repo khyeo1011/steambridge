@@ -20,7 +20,19 @@ export const mockApp = {
   }),
 
   GetPeers: async (): Promise<main.PeerInfo[]> =>
-    mockRunning ? [{ steamID: '76561198099999999', ip: '10.8.0.3' }] : [],
+    mockRunning
+      ? [
+          new main.PeerInfo({
+            steamID: '76561198099999999',
+            ip: '10.8.0.3',
+            pingMs: 42,
+            relayed: false,
+            bytesInPerSec: 1024,
+            bytesOutPerSec: 512,
+            statsAvailable: true,
+          }),
+        ]
+      : [],
 
   GetFirewallState: async (): Promise<boolean> => false,
 
