@@ -28,6 +28,10 @@ var (
 	bridgeIsFriend          func(uint64) bool
 	bridgeAcceptSession     func(uint64)
 	bridgeRejectSession     func(uint64)
+
+	// Per-peer connection stats — added for issue #55. Gracefully absent from
+	// older DLLs; registered via tryRegisterLibFunc below.
+	bridgeGetPeerStats func(steamId uint64, outPingMs *int32, outRelayed *bool, outBytesInPerSec *float32, outBytesOutPerSec *float32) bool
 )
 
 // tryRegisterLibFunc registers a DLL export but logs a warning instead of panicking
@@ -82,6 +86,9 @@ func LoadLibrary() error {
 	tryRegisterLibFunc(&bridgeIsFriend, libc, "Bridge_IsFriend")
 	tryRegisterLibFunc(&bridgeAcceptSession, libc, "Bridge_AcceptSession")
 	tryRegisterLibFunc(&bridgeRejectSession, libc, "Bridge_RejectSession")
+
+	bridgeGetPeerStats = func(_ uint64, _ *int32, _ *bool, _ *float32, _ *float32) bool { return false }
+	tryRegisterLibFunc(&bridgeGetPeerStats, libc, "Bridge_GetPeerStats")
 
 	return nil
 }

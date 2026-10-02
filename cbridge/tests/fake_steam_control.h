@@ -7,9 +7,9 @@
 #include <vector>
 
 struct FakeSentPacket {
-    uint64_t toSteamId;
-    std::vector<uint8_t> data;
-    bool reliable;
+  uint64_t toSteamId;
+  std::vector<uint8_t> data;
+  bool reliable;
 };
 
 // Resets ALL fake-Steam state, including the callback registry (see
@@ -22,16 +22,26 @@ void FakeSteam_Reset();
 void FakeSteam_SetLocalSteamID(uint64_t steamId);
 
 // -- Networking (ISteamNetworkingMessages) --
-void FakeSteam_QueueIncomingPacket(uint64_t fromSteamId, const uint8_t* data, size_t size);
+void FakeSteam_QueueIncomingPacket(uint64_t fromSteamId, const uint8_t* data,
+                                   size_t size);
 size_t FakeSteam_PendingIncomingPacketCount();
 void FakeSteam_SetSendShouldFail(bool shouldFail);
 const std::vector<FakeSentPacket>& FakeSteam_GetSentPackets();
 
 // -- Friends --
-void FakeSteam_SetFriendRelationship(uint64_t steamId, int relationship); // EFriendRelationship value
+void FakeSteam_SetFriendRelationship(
+    uint64_t steamId, int relationship);  // EFriendRelationship value
 const std::string& FakeSteam_GetRichPresence();
 bool FakeSteam_WasOverlayActivated();
 
-// -- Callbacks: queue a fake event, delivered on the next Bridge_RunCallbacks() --
+// -- Connection stats (GetSessionConnectionInfo) --
+// Marks steamId as having a live, Connected session with the given stats.
+// Until this is called for a steamId, GetSessionConnectionInfo reports no
+// session for it (mirrors a peer that never connected or has disconnected).
+void FakeSteam_SetConnectionStats(uint64_t steamId, int pingMs, bool relayed,
+                                  float bytesInPerSec, float bytesOutPerSec);
+
+// -- Callbacks: queue a fake event, delivered on the next Bridge_RunCallbacks()
+// --
 void FakeSteam_TriggerSessionRequest(uint64_t remoteSteamId);
 void FakeSteam_TriggerJoinRequested(uint64_t friendSteamId);

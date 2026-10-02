@@ -7,6 +7,13 @@ interface PeersCardProps {
   peers: PeerInfo[]
 }
 
+// Steam's relayed-vs-direct cutover is roughly where users start noticing lag.
+function pingClass(pingMs: number): string {
+  if (pingMs < 80) return styles.peerPingGood
+  if (pingMs < 180) return styles.peerPingOk
+  return styles.peerPingBad
+}
+
 // Generate gradient color based on hashing steamID
 function getAvatarStyle(steamID: string) {
   let hash = 0
@@ -51,7 +58,15 @@ export const PeersCard: React.FC<PeersCardProps> = ({ peers }) => {
                     <span className={styles.peerIP}>{p.ip}</span>
                   </div>
                 </div>
-                <span className={styles.peerStatusBadge}>Active</span>
+                <div className={styles.peerStats}>
+                  {p.statsAvailable && (
+                    <>
+                      <span className={`${styles.peerPing} ${pingClass(p.pingMs)}`}>{p.pingMs} ms</span>
+                      <span className={styles.peerRelayBadge}>{p.relayed ? 'Relayed' : 'Direct'}</span>
+                    </>
+                  )}
+                  <span className={styles.peerStatusBadge}>Active</span>
+                </div>
               </div>
             )
           })

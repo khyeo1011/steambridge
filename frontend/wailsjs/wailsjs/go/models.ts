@@ -3,6 +3,11 @@ export namespace main {
 	export class PeerInfo {
 	    steamID: string;
 	    ip: string;
+	    pingMs: number;
+	    relayed: boolean;
+	    bytesInPerSec: number;
+	    bytesOutPerSec: number;
+	    statsAvailable: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new PeerInfo(source);
@@ -12,6 +17,11 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.steamID = source["steamID"];
 	        this.ip = source["ip"];
+	        this.pingMs = source["pingMs"];
+	        this.relayed = source["relayed"];
+	        this.bytesInPerSec = source["bytesInPerSec"];
+	        this.bytesOutPerSec = source["bytesOutPerSec"];
+	        this.statsAvailable = source["statsAvailable"];
 	    }
 	}
 	export class StatusPayload {

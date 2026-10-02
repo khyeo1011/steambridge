@@ -458,6 +458,38 @@
   border-radius: 0.25rem;
 }
 
+.peerStats {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.peerPing {
+  font-size: 0.7rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.peerPingGood {
+  color: #34d399;
+}
+
+.peerPingOk {
+  color: #fbbf24;
+}
+
+.peerPingBad {
+  color: #f87171;
+}
+
+.peerRelayBadge {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.25rem;
+}
+
 .connectionList {
   list-style: none;
   padding: 0;

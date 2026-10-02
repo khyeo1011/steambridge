@@ -418,3 +418,21 @@ func (c *Client) GetLocalIP() uint32 {
 func (c *Client) SetLocalIP(ip uint32) {
 	c.localIP.Store(ip)
 }
+
+// PeerStats holds live per-peer connection quality from Steam's networking
+// layer: ping, whether traffic is relayed through Steam's network vs. direct,
+// and instantaneous throughput.
+type PeerStats struct {
+	PingMs         int32
+	Relayed        bool
+	BytesInPerSec  float32
+	BytesOutPerSec float32
+}
+
+// GetPeerStats reports live connection quality for steamID. ok is false if
+// there's no active session with steamID (e.g. never connected, or dropped).
+func (c *Client) GetPeerStats(steamID uint64) (PeerStats, bool) {
+	var stats PeerStats
+	ok := bridgeGetPeerStats(steamID, &stats.PingMs, &stats.Relayed, &stats.BytesInPerSec, &stats.BytesOutPerSec)
+	return stats, ok
+}
